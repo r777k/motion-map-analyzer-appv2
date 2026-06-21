@@ -9,3 +9,5 @@ pandas
 geopy
 playwright
 fitparse
+timezonefinder
+python-multipart
