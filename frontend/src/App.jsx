@@ -337,7 +337,38 @@ function App() {
     return h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`;
   };
 
-if (!data) {
+/* --- ASYNCHRONOUS FRONTEND-DRIVEN DEMO FILE TRYOUT HANDLER --- */
+  const handleDemoTryout = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // 1. Fetch the static tcx asset from your local frontend server/Vercel distribution
+      const res = await fetch('/demo.tcx');
+      if (!res.ok) throw new Error("Could not load the built-in demo activity file asset.");
+      
+      const blob = await res.blob();
+      
+      // 2. Wrap the raw binary stream inside a native browser File instance wrapper
+      const demoFile = new File([blob], 'demo.tcx', { type: 'application/octet-stream' });
+      
+      // 3. Package it into standard form multipart arrays to match real user file ingest streams
+      const formData = new FormData();
+      formData.append('file', demoFile);
+      formData.append('apply_privacy', applyPrivacy); // Honors their current privacy checkbox state
+
+      const response = await axios.post(`${API_BASE}/api/analyze`, formData, {
+        headers: userToken ? { Authorization: `Bearer ${userToken}` } : {}
+      });
+      
+      setData(response.data.data);
+    } catch (err) {
+      setError(err.message || "An error occurred while loading the demo run workspace channels.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!data) {
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center p-6 md:p-12 transition-colors duration-200 relative ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
         
@@ -411,7 +442,7 @@ if (!data) {
           /* RESPONSIVE DUAL-PANEL GRID LAYOUT */
           <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             
-            {/* LEFT COLUMN: BRIEF GENTLE USER FEATURE HIGHLIGHTS */}
+            {/* LEFT COLUMN: GENTLE USER FEATURE HIGHLIGHTS */}
             <div className="lg:col-span-7 space-y-5 p-2">
               <h2 className="text-xl font-black tracking-tight flex items-center mb-2">
                 <span className="mr-2">⚡</span> Quick Start & Feature Highlights
@@ -444,7 +475,7 @@ if (!data) {
               </div>
             </div>
 
-            {/* RIGHT COLUMN: RECTANGULAR CARD ENCLOSING UPLOAD CONTROL MODULE */}
+            {/* RIGHT COLUMN: RECTANGULAR UPLOAD CONTROL CARD */}
             <div className={`lg:col-span-5 p-8 rounded-2xl shadow-xl border w-full transition-all duration-200 ${theme === 'dark' ? 'bg-slate-900 border-slate-800/80' : 'bg-white border-slate-200'}`}>
               <form onSubmit={handleUpload} className="flex flex-col items-center space-y-5">
                 <div className={`p-4 rounded-full ${theme === 'dark' ? 'bg-slate-950' : 'bg-blue-50'}`}>
@@ -475,6 +506,20 @@ if (!data) {
                   {loading ? 'Processing Analytics...' : 'Analyze Run Workspace'}
                 </button>
               </form>
+
+              {/* DYNAMIC TRY-OUT TRIGGER ELEMENT LINK INJECTED HERE */}
+              <div className="text-center mt-4 pt-1 border-t border-dashed border-slate-500/10">
+                <span className="text-xs text-slate-400">Don't have an activity file handy? </span>
+                <button 
+                  type="button" 
+                  onClick={handleDemoTryout} 
+                  disabled={loading}
+                  className="text-xs text-blue-500 hover:text-blue-600 hover:underline font-bold bg-transparent border-none p-0 cursor-pointer disabled:opacity-30"
+                >
+                  Try our demo run
+                </button>
+              </div>
+
               {error && <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-xs font-bold text-center leading-normal">{error}</div>}
             </div>
 
