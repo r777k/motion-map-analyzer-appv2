@@ -15,7 +15,7 @@ function App() {
   const [error, setError] = useState(null);
   const [hoveredTrackpoint, setHoveredTrackpoint] = useState(null);
   const [applyPrivacy, setApplyPrivacy] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(450);
+  const [sidebarWidth, setSidebarWidth] = useState(500);
   const [isDraggingSplitter, setIsDraggingSplitter] = useState(false);
   const [theme, setTheme] = useState('light');
 
@@ -363,7 +363,6 @@ function App() {
         </div>
 
         <header className="flex items-center space-x-3 mb-8">
-          <Activity className="w-10 h-10 text-blue-600" />
           <h1 className="text-3xl font-black tracking-tight">👟📍📈 Motion Map Analyzer</h1>
         </header>
         
@@ -476,7 +475,7 @@ function App() {
       >
         <header className={`pb-4 border-b flex justify-between items-start flex-shrink-0 ${theme === 'dark' ? 'border-slate-800' : 'border-slate-200'}`}>
           <div>
-            <h1 className="text-lg font-black tracking-tight flex items-center"><span className="mr-2">👟📍📈</span> Motion Map Analyzer</h1>
+            <h1 className="text-lg font-black tracking-tight flex items-center"><span className="mr-2">👟📍📈</span>Motion Map Analyzer</h1>
             <div className="flex items-center space-x-2 mt-2">
               <button onClick={exportToCSV} className={`px-2 py-1 text-[10px] font-bold rounded border ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-slate-200 text-slate-600 shadow-sm'}`}><Download className="w-3 h-3 inline mr-1" />Export CSV</button>
               <button onClick={captureVisualSnapshot} className={`px-2 py-1 text-[10px] font-bold rounded border ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-slate-200 text-slate-600 shadow-sm'}`}><Camera className="w-3 h-3 inline mr-1" />Share Card</button>
