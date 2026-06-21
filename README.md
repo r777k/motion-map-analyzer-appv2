@@ -1,7 +1,3 @@
-Here is a comprehensive, production-ready `README.md` tailored specifically for **MotionMap Analyzer v2**. It explicitly documents the updated decoupled architecture, the zero-knowledge identity database design, local setup procedures, and production environment expectations.
-
----
-
 # 👟📍📈 MotionMap Analyzer v2
 
 An interactive, production-grade fitness telemetry workspace and data analytics platform designed for endurance athletes who demand deep biometric insights without compromising personal data privacy.
