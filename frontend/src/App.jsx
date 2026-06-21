@@ -337,10 +337,11 @@ function App() {
     return h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`;
   };
 
-  if (!data) {
+if (!data) {
     return (
-      <div className={`min-h-screen flex flex-col items-center justify-center p-8 transition-colors duration-200 relative ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
+      <div className={`min-h-screen flex flex-col items-center justify-center p-6 md:p-12 transition-colors duration-200 relative ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
         
+        {/* HEADER TOOLBAR ALIGNMENT */}
         <div className="absolute top-6 right-6 flex items-center space-x-3">
           {userToken ? (
             <div className="flex items-center space-x-2">
@@ -362,8 +363,10 @@ function App() {
           </button>
         </div>
 
-        <header className="flex items-center space-x-3 mb-8">
-          <h1 className="text-3xl font-black tracking-tight">👟📍📈 Motion Map Analyzer</h1>
+        {/* LOGO TITLE SECTION */}
+        <header className="flex flex-col items-center mb-12 text-center flex-shrink-0">
+          <h1 className="text-4xl font-black tracking-tight mb-1">👟📍📈 Motion Map Analyzer</h1>
+          <p className={`text-xs font-bold uppercase tracking-widest ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Interactive Workout Analytics Workspace</p>
         </header>
         
         {activeSidebarTab === 'history' && userToken ? (
@@ -405,22 +408,76 @@ function App() {
             </div>
           </div>
         ) : (
-          <div className={`p-8 rounded-xl shadow-md border w-full max-w-md transition-all duration-200 ${theme === 'dark' ? 'bg-slate-900 border-slate-800/80' : 'bg-white border-slate-200'}`}>
-            <form onSubmit={handleUpload} className="flex flex-col items-center space-y-4">
-              <UploadCloud className={`w-12 h-12 ${theme === 'dark' ? 'text-slate-600' : 'text-slate-400'}`} />
-              <h2 className="text-lg font-bold">Upload Activity File</h2>
-              <input type="file" accept=".tcx,.fit" onChange={handleFileChange} className={`text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold w-full cursor-pointer ${theme === 'dark' ? 'text-slate-400 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700' : 'text-slate-500 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100'}`} />
+          /* RESPONSIVE DUAL-PANEL GRID LAYOUT */
+          <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            
+            {/* LEFT COLUMN: BRIEF GENTLE USER FEATURE HIGHLIGHTS */}
+            <div className="lg:col-span-7 space-y-5 p-2">
+              <h2 className="text-xl font-black tracking-tight flex items-center mb-2">
+                <span className="mr-2">⚡</span> Quick Start & Feature Highlights
+              </h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-sm'}`}>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-blue-500 mb-1">📁 Easy File Uploads</h3>
+                  <p className="text-xs text-slate-400 leading-normal font-medium">Drop any standard workout file. Supports raw binary (<code className="font-mono text-blue-400">.fit</code>) and Training Center Extension (<code className="font-mono text-blue-400">.tcx</code>) activity streams.</p>
+                </div>
 
-              <div className={`w-full flex items-center justify-between p-3 border rounded-lg mt-2 relative group ${theme === 'dark' ? 'bg-slate-950/40 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-                <label className="flex items-center space-x-2 text-sm font-semibold cursor-pointer select-none"><input type="checkbox" checked={applyPrivacy} onChange={(e) => setApplyPrivacy(e.target.checked)} className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-0 cursor-pointer" /><span className="opacity-90">Enable privacy zone mask</span></label>
-                <div className="relative flex items-center">
-                  <Info className={`w-4 h-4 cursor-help ${theme === 'dark' ? 'text-slate-600' : 'text-slate-400'}`} />
+                <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-sm'}`}>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-emerald-500 mb-1">🔒 Smart Privacy Masking</h3>
+                  <p className="text-xs text-slate-400 leading-normal font-medium">Enable the mask to auto-hide the first and last 500 meters of your route path. Your charts stay perfectly accurate, but your private locations stay private.</p>
+                </div>
+
+                <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-sm'}`}>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-purple-500 mb-1">📊 Deep Workout Analytics</h3>
+                  <p className="text-xs text-slate-400 leading-normal font-medium">See your absolute fastest rolling intervals (400m, 1K, 5K), individual kilometer split logs, and comprehensive cardiovascular time-in-zone grids.</p>
+                </div>
+
+                <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-sm'}`}>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-amber-500 mb-1">👁️ Map & Elevation Sync</h3>
+                  <p className="text-xs text-slate-400 leading-normal font-medium">Hover anywhere across your responsive elevation chart. A smart tracking indicator moves along your map path to show you exactly where each milestone happened.</p>
                 </div>
               </div>
 
-              <button type="submit" disabled={!file || loading} className="mt-4 w-full py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 disabled:opacity-40 transition-colors shadow-sm">{loading ? 'Analyzing...' : 'Analyze Run'}</button>
-            </form>
-            {error && <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-lg text-xs font-bold text-center">{error}</div>}
+              <div className={`p-4 rounded-xl border text-center ${theme === 'dark' ? 'bg-blue-950/20 border-blue-900/30 text-blue-400' : 'bg-blue-500/5 border-blue-500/10 text-blue-600'}`}>
+                <p className="text-[11px] font-bold leading-normal">🛡️ <span className="uppercase tracking-wider font-black mr-1">Privacy First:</span> Workout charts process fully in local execution memory. Opting to save data cryptographically anonymizes accounts using completely irreversible SHA-256 signatures.</p>
+              </div>
+            </div>
+
+            {/* RIGHT COLUMN: RECTANGULAR CARD ENCLOSING UPLOAD CONTROL MODULE */}
+            <div className={`lg:col-span-5 p-8 rounded-2xl shadow-xl border w-full transition-all duration-200 ${theme === 'dark' ? 'bg-slate-900 border-slate-800/80' : 'bg-white border-slate-200'}`}>
+              <form onSubmit={handleUpload} className="flex flex-col items-center space-y-5">
+                <div className={`p-4 rounded-full ${theme === 'dark' ? 'bg-slate-950' : 'bg-blue-50'}`}>
+                  <UploadCloud className={`w-10 h-10 ${theme === 'dark' ? 'text-slate-500' : 'text-blue-500'}`} />
+                </div>
+                <div className="text-center">
+                  <h2 className="text-lg font-black tracking-tight">Upload Workout File</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Select a tracking log asset file to execute analysis</p>
+                </div>
+                
+                <input type="file" accept=".tcx,.fit" onChange={handleFileChange} className={`text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black w-full cursor-pointer border p-2 rounded-xl ${theme === 'dark' ? 'text-slate-400 border-slate-800 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700' : 'text-slate-500 border-slate-100 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 shadow-inner'}`} />
+
+                <div className={`w-full flex items-center justify-between p-3.5 border rounded-xl relative group ${theme === 'dark' ? 'bg-slate-950/40 border-slate-800' : 'bg-slate-50/50 border-slate-200'}`}>
+                  <label className="flex items-center space-x-2.5 text-xs font-bold cursor-pointer select-none">
+                    <input type="checkbox" checked={applyPrivacy} onChange={(e) => setApplyPrivacy(e.target.checked)} className="w-4 h-4 text-blue-600 rounded-lg border-slate-300 dark:border-slate-800 dark:bg-slate-950 focus:ring-0 cursor-pointer" />
+                    <span className="opacity-90">Enable privacy zone mask</span>
+                  </label>
+                  <div className="relative flex items-center">
+                    <Info className={`w-4 h-4 cursor-help ${theme === 'dark' ? 'text-slate-600' : 'text-slate-400'}`} />
+                    <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-52 p-2.5 bg-slate-950 text-white text-[11px] font-medium rounded-xl shadow-2xl z-50 text-center leading-normal border border-slate-800">
+                      Hides the first and last 500 meters of your route to protect home/start locations.
+                      <div className="absolute top-full right-1.5 -mt-1 border-4 border-transparent border-t-slate-950"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <button type="submit" disabled={!file || loading} className="mt-2 w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs uppercase tracking-wider disabled:opacity-30 transition-all shadow-md shadow-blue-600/10">
+                  {loading ? 'Processing Analytics...' : 'Analyze Run Workspace'}
+                </button>
+              </form>
+              {error && <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-xs font-bold text-center leading-normal">{error}</div>}
+            </div>
+
           </div>
         )}
 
