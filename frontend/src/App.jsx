@@ -307,7 +307,7 @@ function App() {
 
     try {
       const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-      const response = await axios.post(`${API_BASE}/api/export-snapshot', {
+      const response = await axios.post(`${API_BASE}/api/export-snapshot`, {
         summary: data.summary,
         segments: data.segments,
         trackpoints: data.trackpoints,
