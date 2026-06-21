@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    :root {
+      --bg: #f8fafc; --card-bg: #ffffff; --text: #0f172a; --text-muted: #64748b; --border: #e2e8f0; --sub-panel: #f1f5f9;
+    }
+    body.dark-theme {
+      --bg: #0f172a; --card-bg: #1e293b; --text: #f8fafc; --text-muted: #94a3b8; --border: #334155; --sub-panel: #0f172a;
+    }
+    body {
+      margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      /* UPGRADED: Canvas canvas size dimensions expanded to eliminate line wrapping leaks */
+      width: 1650px; height: 950px; overflow: hidden; background: var(--bg); color: var(--text); box-sizing: border-box;
+    }
+    .dashboard-container {
+      display: flex; flex-direction: column; height: 100%; padding: 24px; gap: 20px; box-sizing: border-box;
+    }
+    
+    /* BANNER HEADER MATRIX */
+    .header-banner {
+      display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 20px 32px; border-radius: 12px; border: 1px solid var(--border);
+    }
+    .title-group h1 { margin: 0; font-size: 30px; font-weight: 900; letter-spacing: -0.025em; }
+    .title-group p { margin: 6px 0 0; font-size: 18px; color: var(--text-muted); font-weight: 500; }
+    .macro-stats { display: flex; gap: 54px; }
+    .macro-box .lbl { font-size: 15px; font-weight: 800; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em; }
+    .macro-box .num { font-size: 36px; font-weight: 900; margin-top: 4px; }
+    
+    /* 30:70 SPLIT FLEX CHASSIS */
+    .middle-split-row { display: flex; width: 100%; height: 500px; gap: 20px; }
+    /* UPGRADED: Fixed sidebar footprint to 30% to maximize wide aspect ratio map balance */
+    .left-sidebar-col { width: 30%; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; }
+    .right-map-col { width: 70%; height: 100%; position: relative; }
+    
+    /* RUN SUMMARY COMPONENT STRUCTURE */
+    .panel-box {
+      background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 24px; box-sizing: border-box; display: flex; flex-direction: column; height: 100%;
+    }
+    .panel-title { font-size: 18px; font-weight: 800; text-transform: uppercase; color: var(--text-muted); border-b: 1px solid var(--border); padding-bottom: 10px; margin: 0 0 20px 0; letter-spacing: 0.05em; }
+    .stat-matrix-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; flex: 1; }
+    .stat-cell { display: flex; flex-direction: column; justify-content: center; }
+    .stat-cell .cell-lbl { font-size: 14px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); }
+    .stat-cell .cell-val { font-size: 24px; font-weight: 900; margin-top: 4px; line-height: 1.1; white-space: nowrap; }
+    
+    .motion-strip { display: flex; gap: 10px; border-top: 1px solid var(--border); padding-top: 16px; margin-top: auto; }
+    .motion-pill { flex: 1; background: var(--sub-panel); padding: 10px; border-radius: 8px; text-align: center; }
+    .motion-pill .p-lbl { font-size: 12px; font-weight: 800; text-transform: uppercase; color: var(--text-muted); }
+    .motion-pill .p-val { font-size: 24px; font-weight: 900; margin-top: 4px; white-space: nowrap; }
+
+    #snapshot-map { width: 100%; height: 100%; border-radius: 12px; border: 1px solid var(--border); }
+
+    /* TIMELINE PROFILE CHART PANEL */
+    .bottom-chart-panel { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 24px; height: 260px; box-sizing: border-box; margin-top: auto; }
+    .chart-canvas-wrapper { width: 100%; height: 170px; margin-top: 12px; position: relative; }
+    svg { width: 100%; height: 100%; overflow: visible; }
+  </style>
+</head>
+<body>
+
+  <div class="dashboard-container">
+    
+    <div class="header-banner">
+      <div class="title-group" style="color:#2B2D42;">
+        <h1 id="banner-title">Motion Map Analyser</h1>
+        <p id="banner-route-meta">Activity Performance Breakdown</p>
+      </div>
+      <div class="macro-stats">
+        <div class="macro-box"><div class="lbl">Distance</div><div class="num" style="color: #36A264;" id="m-dist">-- km</div></div>
+        <div class="macro-box"><div class="lbl">Duration</div><div class="num" style="color: #A27035;" id="m-time">--:--</div></div>
+        <div class="macro-box"><div class="lbl">Avg Pace</div><div class="num" style="color: #3b82f6;" id="m-pace">--:-- /km</div></div>
+      </div>
+    </div>
+
+    <div class="middle-split-row">
+      <div class="left-sidebar-col">
+        <div class="panel-box">
+          <h4 class="panel-title">⚡ Run Summary Metrics</h4>
+          <div class="stat-matrix-grid">
+            <div class="stat-cell"><div class="cell-lbl">Start Clock</div><div class="cell-val" id="s-start">-</div></div>
+            <div class="stat-cell"><div class="cell-lbl">End Clock</div><div class="cell-val" id="s-end">-</div></div>
+            <div class="stat-cell"><div class="cell-lbl">Moving Dist</div><div class="cell-val" style="color: #36A264;" id="s-dist">-</div></div>
+            <div class="stat-cell"><div class="cell-lbl">Moving Time</div><div class="cell-val" style="color: #A27035;" id="s-time">-</div></div>
+            <div class="stat-cell"><div class="cell-lbl">Avg Pace</div><div class="cell-val" style="color: #3b82f6;" id="s-apace">-</div></div>
+            <div class="stat-cell"><div class="cell-lbl">Max Pace</div><div class="cell-val" style="color: #3b82f6;" id="s-mpace">-</div></div>
+            <div class="stat-cell"><div class="cell-lbl">Average HR</div><div class="cell-val" style="color: #ef4444;" id="s-ahr">-</div></div>
+            <div class="stat-cell"><div class="cell-lbl">Maximum HR</div><div class="cell-val" style="color: #ef4444;" id="s-mhr">-</div></div>
+            <div class="stat-cell"><div class="cell-lbl">Avg Cadence</div><div class="cell-val" style="color: #a855f7;" id="s-acad">-</div></div>
+            <div class="stat-cell"><div class="cell-lbl">Max Cadence</div><div class="cell-val" style="color: #a855f7;" id="s-mcad">-</div></div>
+            <div class="stat-cell"><div class="cell-lbl">Total Ascent</div><div class="cell-val" id="s-asc">-</div></div>
+            <div class="stat-cell"><div class="cell-lbl">Total Descent</div><div class="cell-val" id="s-desc">-</div></div>
+          </div>
+          <div class="motion-strip">
+            <div class="motion-pill"><div class="p-lbl">Running</div><div class="p-val" style="color:#3b82f6;" id="p-running-d">-</div></div>
+            <div class="motion-pill"><div class="p-lbl">Walking</div><div class="p-val" style="color:#f97316;" id="p-walking-d">-</div></div>
+            <div class="motion-pill"><div class="p-lbl">Stopped</div><div class="p-val" style="color:#ef4444;" id="p-stopped-d">-</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="right-map-col">
+        <div id="snapshot-map"></div>
+      </div>
+    </div>
+
+    <div class="bottom-chart-panel">
+      <div class="panel-title" style="margin:0; border:0; display:flex; justify-content:space-between; align-items:center;">
+        <span>📈 Timeline Performance Profile Layers</span>
+        <span style="font-size:15px;" id="chart-elev-bounds">Elevation Silhouette Base</span>
+      </div>
+      <div class="chart-canvas-wrapper" id="svg-chart-anchor"></div>
+    </div>
+
+  </div>
+
+  <script>
+    const BASE_MAPS = {
+      'Standard': 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+      'Dark': 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      'Topo': 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png'
+    };
+
+    const formatTime = (secs) => {
+      if (!secs) return "0:00";
+      const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = Math.floor(secs % 60);
+      return h > 0 ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` : `${m}:${s.toString().padStart(2, '0')}`;
+    };
+
+    const formatPace = (decimalMins) => {
+      if (!decimalMins) return "-:--";
+      const m = Math.floor(decimalMins), s = Math.round((decimalMins - m) * 60);
+      return `${m}:${s.toString().padStart(2, '0')}`;
+    };
+
+    const getPercentile = (arr, p) => {
+      if (!arr || arr.length === 0) return 0;
+      const sorted = [...arr].sort((a, b) => a - b);
+      const index = (sorted.length - 1) * p;
+      const lower = Math.floor(index), upper = Math.ceil(index);
+      const weight = index % 1;
+      return sorted[lower] * (1 - weight) + sorted[upper] * weight;
+    };
+
+    window.renderWorkoutCard = function(payload) {
+      const isDark = payload.config?.theme === 'dark';
+      if (isDark) document.body.classList.add('dark-theme');
+
+      const sum = payload.summary || {};
+      const dateObj = sum.start_time ? new Date(sum.start_time.replace(/-/g, '/')) : new Date();
+      const formattedDate = dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+      const city = sum.location_city || "Activity Route";
+
+      // 1. POPULATE BANNER LABELS
+      document.getElementById('banner-title').innerText = `Motion Map Analyser — ${formattedDate} — ${city}`;
+      document.getElementById('m-dist').innerText = `${((sum.moving_distance_m || 0) / 1000).toFixed(2)} km`;
+      document.getElementById('m-time').innerText = formatTime(sum.moving_time_s || sum.duration_s);
+      document.getElementById('m-pace').innerText = `${formatPace(sum.avg_pace_min_per_km)} /km`;
+
+      // 2. POPULATE 12-STAT SUB-GRID BOX CHASSIS
+      document.getElementById('s-start').innerText = sum.start_time ? sum.start_time.split(' ')[1] : '--:--';
+      document.getElementById('s-end').innerText = sum.end_time ? sum.end_time.split(' ')[1] : '--:--';
+      document.getElementById('s-dist').innerText = `${((sum.moving_distance_m || 0) / 1000).toFixed(2)} km`;
+      document.getElementById('s-time').innerText = formatTime(sum.moving_time_s);
+      document.getElementById('s-apace').innerText = `${formatPace(sum.avg_pace_min_per_km)} /km`;
+      document.getElementById('s-mpace').innerText = `${formatPace(sum.max_pace_min_per_km)} /km`;
+      document.getElementById('s-ahr').innerText = sum.avg_hr_bpm ? Math.round(sum.avg_hr_bpm) : '-';
+      document.getElementById('s-mhr').innerText = sum.max_hr_bpm ? Math.round(sum.max_hr_bpm) : '-';
+      document.getElementById('s-acad').innerText = sum.avg_cadence_spm ? Math.round(sum.avg_cadence_spm) : '-';
+      document.getElementById('s-mcad').innerText = sum.max_cadence_spm ? Math.round(sum.max_cadence_spm) : '-';
+      document.getElementById('s-asc').innerText = `${Math.round(sum.ascent_m || 0)} m`;
+      document.getElementById('s-desc').innerText = `${Math.round(sum.descent_m || 0)} m`;
+
+      // 3. POPULATE BOTTOM STRIPS
+      ['running', 'walking', 'stopped'].forEach(t => {
+        const o = sum.motion_totals?.[t] || { distance_m: 0 };
+        document.getElementById(`p-${t}-d`).innerText = `${((o.distance_m || 0) / 1000).toFixed(2)} km`;
+      });
+
+      // 4. LEAFLET CANVAS PATH OVERLAYS
+      const map = L.map('snapshot-map', { zoomControl: false, attributionControl: false, preferCanvas: true });
+      const tileUrl = isDark ? BASE_MAPS['Dark'] : BASE_MAPS[payload.config?.baseMap || 'Standard'];
+      L.tileLayer(tileUrl).addTo(map);
+
+      const trackCoords = payload.segments?.flatMap(seg => seg.coords) || [];
+      if (trackCoords.length > 0) {
+        L.polyline(trackCoords, { color: '#3b82f6', weight: 2.5, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+        map.fitBounds(trackCoords, { padding: [25, 24] });
+      }
+
+      // 5. EXTENDED TIMELINE RENDERING
+      const trackpoints = payload.trackpoints || [];
+      if (trackpoints.length > 0) {
+        const elevations = trackpoints.map(t => t.altitude_m).filter(v => v != null);
+        let eMin = elevations.length ? Math.min(...elevations) : 0;
+        let eMax = elevations.length ? Math.max(...elevations) : 100;
+        eMin = Math.max(0, eMin - 5); eMax += 5;
+        document.getElementById('chart-elev-bounds').innerText = `⛰️ Elevation silhouette: ${eMin.toFixed(0)}m - ${eMax.toFixed(0)}m`;
+
+        const rawHrs = trackpoints.map(t => t.heart_rate_bpm ?? t.heart_rate ?? t.hr).filter(v => v != null);
+        const rawCadences = trackpoints.map(t => t.cadence ?? t.cadence_spm ?? t.stride_cadence).filter(v => v != null);
+        
+        const rawPaces = [];
+        trackpoints.forEach(tp => {
+          const parentSeg = payload.segments?.find(seg => tp.time >= seg.start_time && tp.time <= seg.end_time);
+          let pVal = tp.pace_min_per_km;
+          if (pVal == null || isNaN(pVal)) pVal = parentSeg ? parentSeg.avg_pace_min_per_km : null;
+          if (pVal != null) rawPaces.push(pVal);
+        });
+
+        let hrMin = rawHrs.length ? Math.max(getPercentile(rawHrs, 0.05), 90) : 90;
+        let hrMax = rawHrs.length ? Math.min(getPercentile(rawHrs, 1.0), 200) : 200;
+        if (hrMin >= hrMax) hrMax = hrMin + 50;
+
+        let cadMin = rawCadences.length ? Math.max(getPercentile(rawCadences, 0.05), 100) : 100;
+        let cadMax = rawCadences.length ? getPercentile(rawCadences, 0.95) : 180;
+        if (cadMin >= cadMax) cadMax = cadMin + 40;
+
+        let paceMin = rawPaces.length ? getPercentile(rawPaces, 0.05) : 4.0;
+        let paceMax = rawPaces.length ? Math.min(getPercentile(rawPaces, 0.95), 12.0) : 12.0;
+        if (paceMin >= paceMax) paceMax = paceMin + 4.0;
+
+        // UPGRADED: Expanded base SVG scaling bounds to completely fill the 1650px card template layout
+        const width = 1600, height = 170, padLeft = 10, padRight = 10;
+        const ptsCount = trackpoints.length;
+
+        let elevPath = `M ${padLeft} ${height} `, pacePath = '', hrPath = '', cadPath = '';
+        
+        trackpoints.forEach((tp, idx) => {
+          const x = padLeft + (idx / (ptsCount - 1)) * (width - padLeft - padRight);
+          const elVal = tp.altitude_m || eMin;
+          const yElev = height - (((elVal - eMin) / (eMax - eMin || 1)) * (height * 0.4));
+          elevPath += `L ${x} ${yElev} `;
+
+          const parentSeg = payload.segments?.find(seg => tp.time >= seg.start_time && tp.time <= seg.end_time);
+          let hr = tp.heart_rate_bpm ?? tp.heart_rate ?? tp.hr;
+          let cad = tp.cadence ?? tp.cadence_spm ?? tp.stride_cadence;
+          
+          let pace = tp.pace_min_per_km;
+          if (pace == null || isNaN(pace)) pace = parentSeg ? parentSeg.avg_pace_min_per_km : null;
+
+          if (pace != null) {
+            const normPace = Math.max(0, Math.min(1, (paceMax - pace) / (paceMax - paceMin || 1)));
+            pacePath += `${pacePath===''?'M':'L'} ${x} ${height - normPace * (height * 0.85)} `;
+          }
+          if (hr != null) {
+            const normHr = Math.max(0, Math.min(1, (hr - hrMin) / (hrMax - hrMin || 1)));
+            hrPath += `${hrPath===''?'M':'L'} ${x} ${height - normHr * (height * 0.85)} `;
+          }
+          if (cad != null) {
+            const normCad = Math.max(0, Math.min(1, (cad - cadMin) / (cadMax - cadMin || 1)));
+            cadPath += `${cadPath===''?'M':'L'} ${x} ${height - normCad * (height * 0.85)} `;
+          }
+        });
+        elevPath += `L ${width - padRight} ${height} Z`;
+
+        const fillE = isDark ? '#1e293b' : '#f1f5f9', strokeE = isDark ? '#334155' : '#cbd5e1';
+        
+        document.getElementById('svg-chart-anchor').innerHTML = `
+          <svg viewBox="0 0 ${width} ${height}">
+            <path d="${elevPath}" fill="${fillE}" stroke="${strokeE}" stroke-width="1.5" />
+            <path d="${pacePath}" fill="none" stroke="#3b82f6" stroke-width="2.5" opacity="0.9" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="${hrPath}" fill="none" stroke="#ef4444" stroke-width="2" opacity="0.9" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="${cadPath}" fill="none" stroke="#a855f7" stroke-width="2" opacity="0.9" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        `;
+      }
+
+      setTimeout(() => { window.isRenderCompleteFlag = true; }, 1500);
+    };
+  </script>
+</body>
+</html>

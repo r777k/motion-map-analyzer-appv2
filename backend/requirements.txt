@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+email-validator
+httpx
+python-jose[cryptography]
+psycopg2-binary
+pandas
+geopy
+playwright
