@@ -472,7 +472,8 @@ function App() {
               </div>
 
               <div className={`p-4 rounded-xl border text-center ${theme === 'dark' ? 'bg-blue-950/20 border-blue-900/30 text-blue-400' : 'bg-blue-500/5 border-blue-500/10 text-blue-600'}`}>
-                <p className="text-[11px] font-bold leading-normal">🛡️ <span className="uppercase tracking-wider font-black mr-1">Privacy First:</span> Workout charts process fully in local execution memory. Opting to save data cryptographically anonymizes accounts using completely irreversible SHA-256 signatures.</p>
+                <p className="text-[11px] font-bold leading-normal">🛡️ <span className="uppercase tracking-wider font-black mr-1">Privacy First:</span> Your workouts are processed entirely in your browser's temporary
+memory. Even if you choose to sign in to save your history, we never store or save your email address. Instead, it is instantly turned into an irreversible, anonymous cryptographic signature (SHA-256) so your identity and your routes stay completely yours!</p>
               </div>
             </div>
 
