@@ -15,7 +15,7 @@ function App() {
   const [error, setError] = useState(null);
   const [hoveredTrackpoint, setHoveredTrackpoint] = useState(null);
   const [applyPrivacy, setApplyPrivacy] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(500);
+  const [sidebarWidth, setSidebarWidth] = useState(600);
   const [isDraggingSplitter, setIsDraggingSplitter] = useState(false);
   const [theme, setTheme] = useState('light');
 
