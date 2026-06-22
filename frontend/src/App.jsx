@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { UploadCloud, Info, X, Sun, Moon, Download, Camera, LogIn, LogOut, KeyRound, Calendar, MapPin, Trash2 } from 'lucide-react';
+import { UploadCloud, Info, X, Sun, Moon, Download, Camera, LogIn, LogOut, KeyRound, Calendar, MapPin, Trash2, Search, ArrowUpDown, BarChart3, Clock, Milestone } from 'lucide-react';
 
 import RunSummary from './components/RunSummary';
 import PerformanceStats from './components/PerformanceStats';
@@ -34,6 +34,10 @@ function App() {
   const [activeSidebarTab, setActiveSidebarTab] = useState('upload'); 
   const [historyItems, setHistoryItems] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  // --- OPTION-B SEARCH AND SORT STATE FILTERS ---
+  const [historySearchQuery, setHistorySearchQuery] = useState('');
+  const [historySortBy, setHistorySortBy] = useState('date_desc'); // options: date_desc, distance_desc, pace_asc
 
   // --- MOBILE SCREEN & HARDWARE SENSING CHASSIS ---
   const [isMobileDevice, setIsMobileDevice] = useState(false);
@@ -341,6 +345,35 @@ function App() {
     return h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`;
   };
 
+  // --- OPTION-B COMPREHENSIVE MATHS ACCUMULATORS & FILTERS LOGIC ---
+  const cumulativeDistance = historyItems.reduce((acc, curr) => acc + (curr.distance_km || 0), 0);
+  const cumulativeDuration = historyItems.reduce((acc, curr) => acc + (curr.duration_s || 0), 0);
+
+  const convertPaceToSeconds = (paceStr) => {
+    if (!paceStr || !paceStr.includes(':')) return 999999;
+    const parts = paceStr.split(':');
+    return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+  };
+
+  const filteredAndSortedHistory = historyItems
+    .filter(item => {
+      if (!historySearchQuery) return true;
+      const targetCity = (item.location_city || '').toLowerCase();
+      return targetCity.includes(historySearchQuery.toLowerCase());
+    })
+    .sort((a, b) => {
+      if (historySortBy === 'date_desc') {
+        return new Date(b.start_time) - new Date(a.start_time);
+      }
+      if (historySortBy === 'distance_desc') {
+        return (b.distance_km || 0) - (a.distance_km || 0);
+      }
+      if (historySortBy === 'pace_asc') {
+        return convertPaceToSeconds(a.avg_pace_str) - convertPaceToSeconds(b.avg_pace_str);
+      }
+      return 0;
+    });
+
   if (!data) {
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center p-6 md:p-12 transition-colors duration-200 relative ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
@@ -385,21 +418,78 @@ function App() {
         )}
         
         {activeSidebarTab === 'history' && userToken ? (
-          <div className={`p-6 rounded-2xl shadow-xl border w-full max-w-xl flex flex-col h-[500px] transition-all ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+          <div className={`p-6 rounded-2xl shadow-xl border w-full max-w-3xl flex flex-col h-[650px] transition-all ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
             <h2 className="text-xl font-black tracking-tight mb-4 flex items-center justify-between">
               <span>🗂️ Cloud History Logs</span>
               <button onClick={() => setActiveSidebarTab('upload')} className="text-xs text-blue-500 hover:underline font-bold">Upload a new file instead</button>
             </h2>
+
+            {/* OPTION-B: CUMULATIVE STATS ACCUMULATOR PANEL WIDGETS */}
+            {historyItems.length > 0 && (
+              <div className={`grid grid-cols-3 gap-4 mb-5 p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-950/60 border-slate-800/80' : 'bg-slate-50 border-slate-200 shadow-inner'}`}>
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-blue-500/10 text-blue-500 rounded-lg hidden sm:block"><Milestone className="w-5 h-5" /></div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Distance</p>
+                    <p className="text-lg font-black tracking-tight text-blue-500">{cumulativeDistance.toFixed(2)} <span className="text-xs font-bold">km</span></p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-purple-500/10 text-purple-500 rounded-lg hidden sm:block"><Clock className="w-5 h-5" /></div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Duration</p>
+                    <p className="text-lg font-black tracking-tight text-purple-500">{renderFormattedDuration(cumulativeDuration)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-emerald-500/10 text-emerald-500 rounded-lg hidden sm:block"><BarChart3 className="w-5 h-5" /></div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Workouts</p>
+                    <p className="text-lg font-black tracking-tight text-emerald-500">{historyItems.length} <span className="text-xs font-bold">saved</span></p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* OPTION-B: SEARCH BAR FILTERS AND PERFORMANCE SORTING CONTROLS */}
+            {historyItems.length > 0 && (
+              <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                <div className="flex-1 relative flex items-center">
+                  <Search className="w-4 h-4 absolute left-3 text-slate-500" />
+                  <input 
+                    type="text" 
+                    placeholder="Search by city or country location..." 
+                    value={historySearchQuery}
+                    onChange={(e) => setHistorySearchQuery(e.target.value)}
+                    className={`w-full pl-9 pr-4 py-2 rounded-xl text-xs font-bold border outline-none transition-all focus:ring-1 focus:ring-blue-500 ${theme === 'dark' ? 'bg-slate-950 border-slate-800 focus:border-blue-500' : 'bg-slate-50 border-slate-200 focus:bg-white shadow-sm'}`}
+                  />
+                </div>
+                <div className="relative flex items-center">
+                  <ArrowUpDown className="w-4 h-4 absolute left-3 text-slate-500 pointer-events-none" />
+                  <select
+                    value={historySortBy}
+                    onChange={(e) => setHistorySortBy(e.target.value)}
+                    className={`pl-9 pr-8 py-2 rounded-xl text-xs font-bold border outline-none appearance-none cursor-pointer focus:ring-1 focus:ring-blue-500 ${theme === 'dark' ? 'bg-slate-950 border-slate-800 focus:border-blue-500' : 'bg-slate-50 border-slate-200 shadow-sm'}`}
+                  >
+                    <option value="date_desc">Sort by: Newest Date</option>
+                    <option value="distance_desc">Sort by: Longest Distance</option>
+                    <option value="pace_asc">Sort by: Fastest Pace</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {/* HISTORY CARDS GRID LEDGER */}
             <div className="flex-1 overflow-y-auto space-y-3 pr-1">
               {historyLoading ? (
                 <div className="h-full flex items-center justify-center text-xs font-bold text-slate-400">Streaming Neon Database Logs...</div>
-              ) : historyItems.length === 0 ? (
+              ) : filteredAndSortedHistory.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-slate-800/20 rounded-xl">
-                  <p className="text-sm font-bold text-slate-400">No runs saved yet.</p>
-                  <p className="text-xs text-slate-500 mt-1">Analyze an activity file and click "Save to Account" to populate this ledger!</p>
+                  <p className="text-sm font-bold text-slate-400">{historyItems.length === 0 ? "No runs saved yet." : "No results match your search criteria."}</p>
+                  {historyItems.length === 0 && <p className="text-xs text-slate-500 mt-1">Analyze an activity file and click "Save to Account" to populate this ledger!</p>}
                 </div>
               ) : (
-                historyItems.map(item => (
+                filteredAndSortedHistory.map(item => (
                   <div key={item.id} onClick={() => handleLoadSavedActivity(item.id)} className={`p-4 rounded-xl border cursor-pointer flex items-center justify-between transition-all group ${theme === 'dark' ? 'bg-slate-950 border-slate-800 hover:border-blue-500 hover:bg-slate-900' : 'bg-slate-50 border-slate-200 hover:border-blue-500 hover:bg-white'}`}>
                     <div className="space-y-1">
                       <div className="flex items-center space-x-2 text-sm font-black tracking-tight">
