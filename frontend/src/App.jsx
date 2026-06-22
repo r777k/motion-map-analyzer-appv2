@@ -131,7 +131,7 @@ function App() {
       }, {
         headers: { Authorization: `Bearer ${userToken}` }
       });
-      alert("Workout saved securely to your anonymous profile index!");
+      //alert("Workout saved securely to your anonymous profile index!");
       
       if (res.data && res.data.activity_id) {
         setData(prev => ({ ...prev, id: res.data.activity_id }));
