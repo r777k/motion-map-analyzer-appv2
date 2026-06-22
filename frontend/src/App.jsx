@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { UploadCloud, Activity, Info, X, Sun, Moon, Download, Camera, LogIn, LogOut, KeyRound, Calendar, MapPin, Trash2 } from 'lucide-react';
+import { UploadCloud, Info, X, Sun, Moon, Download, Camera, LogIn, LogOut, KeyRound, Calendar, MapPin, Trash2 } from 'lucide-react';
 
 import RunSummary from './components/RunSummary';
 import PerformanceStats from './components/PerformanceStats';
 import RouteMap from './components/RouteMap';
 import MapControls from './components/MapControls';
 import ElevationProfile from './components/ElevationProfile';
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 function App() {
   const [file, setFile] = useState(null);
@@ -19,22 +21,7 @@ function App() {
   const [isDraggingSplitter, setIsDraggingSplitter] = useState(false);
   const [theme, setTheme] = useState('light');
 
-  // --- MOBILE SCREEN & HARDWARE SENSING CHASSIS ---
-  const [isMobileDevice, setIsMobileDevice] = useState(false);
-  const [isDesktopModeEnabled, setIsDesktopModeEnabled] = useState(false);
-
-  useEffect(() => {
-    const userAgentCheck = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    setIsMobileDevice(userAgentCheck);
-    
-    // If it's a mobile device but the screen real estate matches a desktop window width,
-    // it means the user has actively checked "Request Desktop Site"
-    if (userAgentCheck && window.innerWidth >= 1024) {
-      setIsDesktopModeEnabled(true);
-    }
-  }, []);
-
-  // --- PASSWORDLESS OAUTH OPTIONAL STATE CHASSIS ---
+  // --- PASSWORDLESS OAUTH STATE ---
   const [userToken, setUserToken] = useState(localStorage.getItem('motion_map_token') || null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authEmail, setAuthEmail] = useState('');
@@ -43,10 +30,14 @@ function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState(null);
 
-  // --- PHASE 4: HISTORY MODE NAVIGATION CONFIGS ---
+  // --- HISTORY MODE NAVIGATION CONFIGS ---
   const [activeSidebarTab, setActiveSidebarTab] = useState('upload'); 
   const [historyItems, setHistoryItems] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  // --- MOBILE SCREEN & HARDWARE SENSING CHASSIS ---
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
+  const [isDesktopModeEnabled, setIsDesktopModeEnabled] = useState(false);
 
   const [mapConfig, setMapConfig] = useState({
     baseMap: 'Standard',
@@ -73,10 +64,17 @@ function App() {
   }, [userToken, activeSidebarTab]);
 
   useEffect(() => {
+    const userAgentCheck = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    setIsMobileDevice(userAgentCheck);
+    if (userAgentCheck && window.innerWidth >= 1024) {
+      setIsDesktopModeEnabled(true);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!isDraggingSplitter) return;
     const handleMouseMove = (e) => {
-      const clampedWidth = Math.max(350, Math.min(750, e.clientX));
-      setSidebarWidth(clampedWidth);
+      setSidebarWidth(Math.max(350, Math.min(750, e.clientX)));
     };
     const handleMouseUp = () => { setIsDraggingSplitter(false); };
     document.addEventListener('mousemove', handleMouseMove);
@@ -103,7 +101,6 @@ function App() {
   const fetchUserHistoryList = async () => {
     setHistoryLoading(true);
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
       const res = await axios.get(`${API_BASE}/api/activities`, {
         headers: { Authorization: `Bearer ${userToken}` }
       });
@@ -119,7 +116,6 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
       const res = await axios.get(`${API_BASE}/api/activities/${activityId}`, {
         headers: { Authorization: `Bearer ${userToken}` }
       });
@@ -136,7 +132,6 @@ function App() {
   const handleSaveCurrentRun = async () => {
     if (!data || !userToken) return;
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
       const res = await axios.post(`${API_BASE}/api/activities`, {
         summary: data.summary,
         segments: data.segments,
@@ -146,12 +141,10 @@ function App() {
       }, {
         headers: { Authorization: `Bearer ${userToken}` }
       });
-      //alert("Workout saved securely to your anonymous profile index!");
-      
+      alert("Workout saved securely to your anonymous profile index!");
       if (res.data && res.data.activity_id) {
         setData(prev => ({ ...prev, id: res.data.activity_id }));
       }
-      
       fetchUserHistoryList();
     } catch (err) {
       alert("Failed to pin active workout data to cloud tables.");
@@ -162,7 +155,6 @@ function App() {
     e.stopPropagation(); 
     if (!window.confirm("Are you sure you want to permanently delete this run log?")) return;
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
       await axios.delete(`${API_BASE}/api/activities/${activityId}`, {
         headers: { Authorization: `Bearer ${userToken}` }
       });
@@ -185,7 +177,6 @@ function App() {
     formData.append('apply_privacy', applyPrivacy);
 
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
       const response = await axios.post(`${API_BASE}/api/analyze`, formData, {
         headers: userToken ? { Authorization: `Bearer ${userToken}` } : {}
       });
@@ -202,9 +193,7 @@ function App() {
     if (!authEmail) return;
     setAuthLoading(true);
     setAuthError(null);
-
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
       await axios.post(`${API_BASE}/api/auth/send-otp`, { email: authEmail });
       setAuthStep(2); 
     } catch (err) {
@@ -219,9 +208,7 @@ function App() {
     if (!authOTP || authOTP.length < 6) return;
     setAuthLoading(true);
     setAuthError(null);
-
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
       const response = await axios.post(`${API_BASE}/api/auth/verify-otp`, {
         email: authEmail,
         code: authOTP
@@ -230,9 +217,7 @@ function App() {
       localStorage.setItem('motion_map_token', token);
       setUserToken(token);
       setAuthModalOpen(false);
-      setAuthEmail('');
-      setAuthOTP('');
-      setAuthStep(1);
+      setAuthEmail(''); setAuthOTP(''); setAuthStep(1);
       setActiveSidebarTab('history');
     } catch (err) {
       setAuthError(err.response?.data?.detail || "Invalid or expired authorization code.");
@@ -243,9 +228,30 @@ function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('motion_map_token');
-    setUserToken(null);
-    setActiveSidebarTab('upload');
-    handleCloseRun();
+    setUserToken(null); setActiveSidebarTab('upload'); handleCloseRun();
+  };
+
+  const handleDemoTryout = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/demo.tcx');
+      if (!res.ok) throw new Error("Could not load the built-in demo activity file asset.");
+      const blob = await res.blob();
+      const demoFile = new File([blob], 'demo.tcx', { type: 'application/octet-stream' });
+      const formData = new FormData();
+      formData.append('file', demoFile);
+      formData.append('apply_privacy', applyPrivacy);
+
+      const response = await axios.post(`${API_BASE}/api/analyze`, formData, {
+        headers: userToken ? { Authorization: `Bearer ${userToken}` } : {}
+      });
+      setData(response.data.data);
+    } catch (err) {
+      setError(err.message || "An error occurred while loading the demo run workspace.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const exportToCSV = () => {
@@ -268,40 +274,30 @@ function App() {
       });
     }
 
-    // 1 - Best Rolling Intervals Section Compiler
-    const rollingKey = Object.keys(data.performance || {}).find(k => k.includes("rolling") || k.includes("best"));
-    if (rollingKey && data.performance[rollingKey]?.length > 0) {
-      appendSectionHeader("Best Rolling Intervals Data");
-      csvContent += "Interval Window,Avg Pace,Start Time,End Time\n";
-      data.performance[rollingKey].forEach(row => {
-        csvContent += `"${row.window_m ?? '-'}","${row.pace_min_per_km ?? '-'}","${row.start_time ?? '-'}","${row.end_time ?? '-'}"\n`;
-      });
-    }
+    if (data.performance) {
+      const p = data.performance;
+      const rollingKey = Object.keys(p).find(k => k.includes("rolling") || k.includes("best"));
+      if (rollingKey && p[rollingKey]?.length > 0) {
+        appendSectionHeader("Best Rolling Intervals Data");
+        const headers = Object.keys(p[rollingKey][0]);
+        csvContent += headers.join(",") + "\n";
+        p[rollingKey].forEach(row => { csvContent += headers.map(h => `"${row[h] ?? '-'}"`).join(",") + "\n"; });
+      }
 
-    // 2 - KM Performance Splits Section Compiler
-    if (data.performance?.km_splits?.length > 0) {
-      appendSectionHeader("Km Performance Splits");
-      csvContent += "Split Pace,Avg HR,Avg Cadence,Start Time,End Time\n";
-      data.performance.km_splits.forEach(row => {
-        csvContent += `"${row.pace_min_per_km ?? '-'}","${row.avg_hr_bpm ?? '-'}","${row.avg_cadence_spm ?? '-'}","${row.start_time ?? '-'}","${row.end_time ?? '-'}"\n`;
-      });
-    }
+      if (p.km_splits?.length > 0) {
+        appendSectionHeader("Km Performance Splits");
+        const headers = Object.keys(p.km_splits[0]);
+        csvContent += headers.join(",") + "\n";
+        p.km_splits.forEach(row => { csvContent += headers.map(h => `"${row[h] ?? '-'}"`).join(",") + "\n"; });
+      }
 
-    // 3 - Heart Rate Zone Bands Section Compiler
-    if (data.performance?.hr_bands?.length > 0) {
-      appendSectionHeader("HR Bands");
-      csvContent += "Band,Time,Distance,Avg Pace,EF,Min Val,Max Val\n";
-      data.performance.hr_bands.forEach(row => {
-        csvContent += `"${row.band ?? '-'}","${row.time_s ?? '-'}","${row.distance_m ?? '-'}","${row.avg_pace_min_per_km ?? '-'}","${row.ef ?? '-'}","${row.min_val ?? '-'}","${row.max_val ?? '-'}"\n`;
-      });
-    }
-
-    // 4 - Cadence Zone Bands Section Compiler
-    if (data.performance?.cadence_bands?.length > 0) {
-      appendSectionHeader("Cadence Bands");
-      csvContent += "Band,Time,Distance,Avg Pace,EF,Min Val,Max Val\n";
-      data.performance.cadence_bands.forEach(row => {
-        csvContent += `"${row.band ?? '-'}","${row.time_s ?? '-'}","${row.distance_m ?? '-'}","${row.avg_pace_min_per_km ?? '-'}","${row.ef ?? '-'}","${row.min_val ?? '-'}","${row.max_val ?? '-'}"\n`;
+      ['hr_bands', 'cadence_bands'].forEach(zoneKey => {
+        if (p[zoneKey]?.length > 0) {
+          appendSectionHeader(zoneKey.replace(/_/g, ' '));
+          const headers = Object.keys(p[zoneKey][0]);
+          csvContent += headers.join(",") + "\n";
+          p[zoneKey].forEach(row => { csvContent += headers.map(h => `"${row[h] ?? '-'}"`).join(",") + "\n"; });
+        }
       });
     }
 
@@ -319,14 +315,9 @@ function App() {
     if (!data) return;
     const originalText = document.title;
     document.title = "Generating Card Asset...";
-
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
       const response = await axios.post(`${API_BASE}/api/export-snapshot`, {
-        summary: data.summary,
-        segments: data.segments,
-        trackpoints: data.trackpoints,
-        performance: data.performance,
+        summary: data.summary, segments: data.segments, trackpoints: data.trackpoints, performance: data.performance,
         config: { theme, overlayMetric: mapConfig.overlayMetric, colorScale: mapConfig.colorScale, thickness: mapConfig.thickness }
       }, { responseType: 'blob' });
 
@@ -337,7 +328,6 @@ function App() {
       downloadAnchor.download = `MotionMap_Card_${data.summary?.start_time?.split(' ')[0] || 'Run'}.png`;
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
-      
       document.body.removeChild(downloadAnchor);
       window.URL.revokeObjectURL(imgUrl);
     } catch (err) {
@@ -350,31 +340,6 @@ function App() {
   const renderFormattedDuration = (seconds) => {
     const h = Math.floor(seconds / 3600), m = Math.floor((seconds % 3600) / 60), s = seconds % 60;
     return h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`;
-  };
-
-/* --- ASYNCHRONOUS FRONTEND-DRIVEN DEMO FILE TRYOUT HANDLER --- */
-  const handleDemoTryout = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch('/demo.tcx');
-      if (!res.ok) throw new Error("Could not load the built-in demo activity file asset.");
-      const blob = await res.blob();
-      const demoFile = new File([blob], 'demo.tcx', { type: 'application/octet-stream' });
-      const formData = new FormData();
-      formData.append('file', demoFile);
-      formData.append('apply_privacy', applyPrivacy);
-
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-      const response = await axios.post(`${API_BASE}/api/analyze`, formData, {
-        headers: userToken ? { Authorization: `Bearer ${userToken}` } : {}
-      });
-      setData(response.data.data);
-    } catch (err) {
-      setError(err.message || "An error occurred while loading the demo run workspace.");
-    } finally {
-      setLoading(false);
-    }
   };
 
   if (!data) {
@@ -496,13 +461,12 @@ function App() {
                 <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-sm'}`}>
                   <h3 className="text-xs font-black uppercase tracking-wider text-amber-500 mb-1.5">👁️ Map & Elevation Sync</h3>
                   <ul className="text-xs text-slate-400 space-y-1 font-medium list-disc pl-4">
-                    <li>Hover across your altitude profile chart to drive a real-time sync map dot.</li>
+                    <li>Hover across your responsive elevation chart to drive a real-time sync map dot.</li>
                     <li>Pinpoints exactly where your heart rate peaked or your pace changed.</li>
                   </ul>
                 </div>
               </div>
 
-              {/* PRIVACY FIRST FOOTER NOTIFICATION ACCENT CONTAINER */}
               <div className={`p-4 rounded-xl border text-center shadow-inner ${theme === 'dark' ? 'bg-blue-950/20 border-blue-900/30 text-blue-400' : 'bg-blue-500/5 border-blue-500/10 text-blue-600'}`}>
                 <p className="text-[11px] font-bold leading-normal">🛡️ <span className="uppercase tracking-wider font-black mr-1">Privacy First:</span> Your workouts are processed entirely in your browser's temporary memory. Even if you choose to sign in to save your history, we never store or save your email address. Instead, it is instantly turned into an irreversible, anonymous cryptographic signature (SHA-256) so your identity and your routes stay completely yours!</p>
               </div>
@@ -558,6 +522,9 @@ function App() {
 
           </div>
         )}
+      </div>
+    );
+  }
 
   return (
     <div className={`flex h-screen overflow-hidden font-sans transition-colors duration-200 ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
@@ -613,7 +580,7 @@ function App() {
 
       <div onMouseDown={() => setIsDraggingSplitter(true)} className="w-1 h-full cursor-col-resize flex-shrink-0 bg-slate-200 dark:bg-slate-800" />
 
-     {/* RIGHT DISPLAY CANVASES */}
+      {/* RIGHT DISPLAY CANVASES */}
       <div className="flex-1 h-full p-4 flex flex-col space-y-4 overflow-hidden min-w-0">
          <div className="flex-1 w-full relative rounded-xl overflow-hidden shadow-sm">
             {data.trackpoints && (
@@ -625,7 +592,7 @@ function App() {
               <ElevationProfile trackpoints={data.trackpoints} segments={data.segments} config={mapConfig} activeHighlight={activeHighlight} setActiveHighlight={setActiveHighlight} setHoveredTrackpoint={setHoveredTrackpoint} theme={theme} />
             )}
             
-            {/* OPTION 4: SUBTLE DATA NOTICE SUBFOOTER ACCENT INJECTED HERE */}
+            {/* FOOTER DATA NOTICE SUB-BAR */}
             <div className="text-center w-full select-none pointer-events-none pb-1">
               <span className={`text-[10px] font-bold tracking-normal opacity-40 transition-colors ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
                 ⚠️ <strong>Data Notice:</strong> Motion segmentation and metrics are estimations. Final map geometry and statistics may differ slightly from your native tracker due to GPS drift and algorithm smoothing.
@@ -633,6 +600,7 @@ function App() {
             </div>
          </div>
       </div>
+
     </div>
   );
 }
