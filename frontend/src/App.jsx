@@ -613,20 +613,26 @@ function App() {
 
       <div onMouseDown={() => setIsDraggingSplitter(true)} className="w-1 h-full cursor-col-resize flex-shrink-0 bg-slate-200 dark:bg-slate-800" />
 
-      {/* RIGHT DISPLAY CANVASES */}
+     {/* RIGHT DISPLAY CANVASES */}
       <div className="flex-1 h-full p-4 flex flex-col space-y-4 overflow-hidden min-w-0">
          <div className="flex-1 w-full relative rounded-xl overflow-hidden shadow-sm">
             {data.trackpoints && (
               <RouteMap segments={data.segments} trackpoints={data.trackpoints} config={mapConfig} splits={data.performance?.km_splits} activeHighlight={activeHighlight} hoveredTrackpoint={hoveredTrackpoint} setActiveHighlight={setActiveHighlight} theme={theme} />
             )}
          </div>
-         <div className="w-full flex-shrink-0">
+         <div className="w-full flex-shrink-0 flex flex-col space-y-2">
             {data.trackpoints && (
               <ElevationProfile trackpoints={data.trackpoints} segments={data.segments} config={mapConfig} activeHighlight={activeHighlight} setActiveHighlight={setActiveHighlight} setHoveredTrackpoint={setHoveredTrackpoint} theme={theme} />
             )}
+            
+            {/* OPTION 4: SUBTLE DATA NOTICE SUBFOOTER ACCENT INJECTED HERE */}
+            <div className="text-center w-full select-none pointer-events-none pb-1">
+              <span className={`text-[10px] font-bold tracking-normal opacity-40 transition-colors ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+                ⚠️ <strong>Data Notice:</strong> Motion segmentation and metrics are estimations. Final map geometry and statistics may differ slightly from your native tracker due to GPS drift and algorithm smoothing.
+              </span>
+            </div>
          </div>
       </div>
-
     </div>
   );
 }
