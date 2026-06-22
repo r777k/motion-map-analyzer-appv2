@@ -35,9 +35,9 @@ function App() {
   const [historyItems, setHistoryItems] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // --- OPTION-B SEARCH AND SORT STATE FILTERS ---
+  // --- SEARCH AND SORT STATE FILTERS ---
   const [historySearchQuery, setHistorySearchQuery] = useState('');
-  const [historySortBy, setHistorySortBy] = useState('date_desc'); // options: date_desc, distance_desc, pace_asc
+  const [historySortBy, setHistorySortBy] = useState('date_desc'); 
 
   // --- MOBILE SCREEN & HARDWARE SENSING CHASSIS ---
   const [isMobileDevice, setIsMobileDevice] = useState(false);
@@ -345,7 +345,7 @@ function App() {
     return h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`;
   };
 
-  // --- OPTION-B COMPREHENSIVE MATHS ACCUMULATORS & FILTERS LOGIC ---
+  // --- MATHS ACCUMULATORS & FILTERS LOGIC ---
   const cumulativeDistance = historyItems.reduce((acc, curr) => acc + (curr.distance_km || 0), 0);
   const cumulativeDuration = historyItems.reduce((acc, curr) => acc + (curr.duration_s || 0), 0);
 
@@ -419,12 +419,13 @@ function App() {
         
         {activeSidebarTab === 'history' && userToken ? (
           <div className={`p-6 rounded-2xl shadow-xl border w-full max-w-3xl flex flex-col h-[650px] transition-all ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+            {/* RENAMED HEADER TO WORKOUT HISTORY LOGS */}
             <h2 className="text-xl font-black tracking-tight mb-4 flex items-center justify-between">
-              <span>🗂️ Cloud History Logs</span>
+              <span>🗂️ Workout History Logs</span>
               <button onClick={() => setActiveSidebarTab('upload')} className="text-xs text-blue-500 hover:underline font-bold">Upload a new file instead</button>
             </h2>
 
-            {/* OPTION-B: CUMULATIVE STATS ACCUMULATOR PANEL WIDGETS */}
+            {/* CUMULATIVE STATS ACCUMULATOR PANEL WIDGETS */}
             {historyItems.length > 0 && (
               <div className={`grid grid-cols-3 gap-4 mb-5 p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-950/60 border-slate-800/80' : 'bg-slate-50 border-slate-200 shadow-inner'}`}>
                 <div className="flex items-center space-x-3">
@@ -451,7 +452,7 @@ function App() {
               </div>
             )}
 
-            {/* OPTION-B: SEARCH BAR FILTERS AND PERFORMANCE SORTING CONTROLS */}
+            {/* SEARCH BAR FILTERS AND PERFORMANCE SORTING CONTROLS */}
             {historyItems.length > 0 && (
               <div className="flex flex-col sm:flex-row gap-3 mb-4">
                 <div className="flex-1 relative flex items-center">
@@ -491,20 +492,24 @@ function App() {
               ) : (
                 filteredAndSortedHistory.map(item => (
                   <div key={item.id} onClick={() => handleLoadSavedActivity(item.id)} className={`p-4 rounded-xl border cursor-pointer flex items-center justify-between transition-all group ${theme === 'dark' ? 'bg-slate-950 border-slate-800 hover:border-blue-500 hover:bg-slate-900' : 'bg-slate-50 border-slate-200 hover:border-blue-500 hover:bg-white'}`}>
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-2 text-sm font-black tracking-tight">
-                        <Calendar className="w-3.5 h-3.5 text-blue-500" />
+                    {/* OPTION-B COMPACTED 2-LINE ACTIVITY RENDERER LAYOUT SLOT */}
+                    <div className="space-y-0.5">
+                      {/* Line 1: Date Time, Location */}
+                      <div className="flex items-center space-x-1.5 text-sm font-black tracking-tight text-slate-800 dark:text-slate-200">
+                        <Calendar className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
                         <span>{item.start_time.split(' ')[0]}</span>
-                        <span className="text-xs opacity-40 font-medium">{item.start_time.split(' ')[1]}</span>
+                        <span className="font-medium text-xs opacity-50">{item.start_time.split(' ')[1]},</span>
+                        <span className="font-bold text-xs text-slate-500 dark:text-slate-400 max-w-[280px] truncate">{item.location_city || 'Local Route'}</span>
                       </div>
-                      <div className="flex items-center space-x-3 text-xs font-bold text-slate-400">
+                      
+                      {/* Line 2: Distance Duration Avg Pace */}
+                      <div className="flex items-center space-x-2 text-xs font-bold text-slate-400">
                         <span className="text-blue-500 text-sm font-black">
                           {item.distance_km ? `${item.distance_km.toFixed(2)} km` : '- km'}
                         </span>
-                        <span>⏱️ {renderFormattedDuration(item.duration_s)}</span>
-                        <span className="text-purple-500">⚡ {item.avg_pace_str || '-:--'} /km</span>
+                        <span className="flex items-center">⏱️ {renderFormattedDuration(item.duration_s)}</span>
+                        <span className="text-purple-500 flex items-center">⚡ {item.avg_pace_str || '-:--'} /km</span>
                       </div>
-                      <div className="text-[11px] font-bold text-slate-500 flex items-center space-x-1"><MapPin className="w-3 h-3 text-emerald-500" /> <span>{item.location_city}</span></div>
                     </div>
                     <button onClick={(e) => handleDeleteSavedRun(e, item.id)} className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"><Trash2 className="w-4 h-4" /></button>
                   </div>
