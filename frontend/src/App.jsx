@@ -19,6 +19,21 @@ function App() {
   const [isDraggingSplitter, setIsDraggingSplitter] = useState(false);
   const [theme, setTheme] = useState('light');
 
+  // --- MOBILE SCREEN & HARDWARE SENSING CHASSIS ---
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
+  const [isDesktopModeEnabled, setIsDesktopModeEnabled] = useState(false);
+
+  useEffect(() => {
+    const userAgentCheck = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    setIsMobileDevice(userAgentCheck);
+    
+    // If it's a mobile device but the screen real estate matches a desktop window width,
+    // it means the user has actively checked "Request Desktop Site"
+    if (userAgentCheck && window.innerWidth >= 1024) {
+      setIsDesktopModeEnabled(true);
+    }
+  }, []);
+
   // --- PASSWORDLESS OAUTH OPTIONAL STATE CHASSIS ---
   const [userToken, setUserToken] = useState(localStorage.getItem('motion_map_token') || null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -342,28 +357,21 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      // 1. Fetch the static tcx asset from your local frontend server/Vercel distribution
       const res = await fetch('/demo.tcx');
       if (!res.ok) throw new Error("Could not load the built-in demo activity file asset.");
-      
       const blob = await res.blob();
-      
-      // 2. Wrap the raw binary stream inside a native browser File instance wrapper
       const demoFile = new File([blob], 'demo.tcx', { type: 'application/octet-stream' });
-      
-      // 3. Package it into standard form multipart arrays to match real user file ingest streams
       const formData = new FormData();
       formData.append('file', demoFile);
-      formData.append('apply_privacy', applyPrivacy); // Honors their current privacy checkbox state
+      formData.append('apply_privacy', applyPrivacy);
 
       const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
       const response = await axios.post(`${API_BASE}/api/analyze`, formData, {
         headers: userToken ? { Authorization: `Bearer ${userToken}` } : {}
       });
-      
       setData(response.data.data);
     } catch (err) {
-      setError(err.message || "An error occurred while loading the demo run workspace channels.");
+      setError(err.message || "An error occurred while loading the demo run workspace.");
     } finally {
       setLoading(false);
     }
@@ -396,10 +404,21 @@ function App() {
         </div>
 
         {/* LOGO TITLE SECTION */}
-        <header className="flex flex-col items-center mb-12 text-center flex-shrink-0">
+        <header className="flex flex-col items-center mb-10 text-center flex-shrink-0">
           <h1 className="text-4xl font-black tracking-tight mb-1">👟📍📈 Motion Map Analyzer</h1>
           <p className={`text-xs font-bold uppercase tracking-widest ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Interactive Workout Analytics Workspace</p>
         </header>
+
+        {/* DYNAMIC RESPONSIVE MOBILE ACCESSIBILITY ALERT NOTICES */}
+        {isMobileDevice && (
+          <div className="w-full max-w-5xl mb-6 p-3 rounded-xl border text-center text-xs font-bold transition-all bg-amber-500/10 border-amber-500/20 text-amber-500 leading-normal">
+            {isDesktopModeEnabled ? (
+              <span>📺 Desktop mode detected! For the best experience mapping routes and sliding across split-pane telemetry graphs, we recommend using a full computer screen and mouse.</span>
+            ) : (
+              <span>📱 Using a phone browser? For the best workspace layout alignment, please switch your browser settings to <strong>"Request Desktop Site"</strong> or open this app on a computer!</span>
+            )}
+          </div>
+        )}
         
         {activeSidebarTab === 'history' && userToken ? (
           <div className={`p-6 rounded-2xl shadow-xl border w-full max-w-xl flex flex-col h-[500px] transition-all ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
@@ -440,10 +459,10 @@ function App() {
             </div>
           </div>
         ) : (
-          /* RESPONSIVE DUAL-PANEL GRID LAYOUT */
+          /* STREAMLINED CONDENSED FEATURE BULLET GRID LAYOUT */
           <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             
-            {/* LEFT COLUMN: GENTLE USER FEATURE HIGHLIGHTS */}
+            {/* LEFT COLUMN: SCANNABLE CONDENSED METRIC BULLETS */}
             <div className="lg:col-span-7 space-y-5 p-2">
               <h2 className="text-xl font-black tracking-tight flex items-center mb-2">
                 <span className="mr-2">⚡</span> Quick Start & Feature Highlights
@@ -451,29 +470,41 @@ function App() {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-sm'}`}>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-blue-500 mb-1">📁 Easy File Uploads</h3>
-                  <p className="text-xs text-slate-400 leading-normal font-medium">Drop any standard workout file. Supports raw binary (<code className="font-mono text-blue-400">.fit</code>) and Training Center Extension (<code className="font-mono text-blue-400">.tcx</code>) activity streams.</p>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-blue-500 mb-1.5">📁 Easy File Uploads</h3>
+                  <ul className="text-xs text-slate-400 space-y-1 font-medium list-disc pl-4">
+                    <li>Supports standard <code className="font-mono text-blue-400 text-[10px]">.fit</code> and Training Center Extension <code className="font-mono text-blue-400 text-[10px]">.tcx</code> sensor streams.</li>
+                    <li>Instantly parses telemetry layouts from Garmin, Coros, Wahoo, and more.</li>
+                  </ul>
                 </div>
 
                 <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-sm'}`}>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-emerald-500 mb-1">🔒 Smart Privacy Masking</h3>
-                  <p className="text-xs text-slate-400 leading-normal font-medium">Enable the mask to auto-hide the first and last 500 meters of your route path. Your charts stay perfectly accurate, but your private locations stay private.</p>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-emerald-500 mb-1.5">🔒 Smart Privacy Masking</h3>
+                  <ul className="text-xs text-slate-400 space-y-1 font-medium list-disc pl-4">
+                    <li>Automatically clips the first and last 500m of your map track coordinates.</li>
+                    <li>Keeps all calculations accurate while keeping home/office locations hidden.</li>
+                  </ul>
                 </div>
 
                 <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-sm'}`}>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-purple-500 mb-1">📊 Deep Workout Analytics</h3>
-                  <p className="text-xs text-slate-400 leading-normal font-medium">See your absolute fastest rolling intervals (400m, 1K, 5K), individual kilometer split logs, and comprehensive cardiovascular time-in-zone grids.</p>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-purple-500 mb-1.5">📊 Deep Workout Analytics</h3>
+                  <ul className="text-xs text-slate-400 space-y-1 font-medium list-disc pl-4">
+                    <li>Computes peak rolling intervals (400m, 1K, 5K) and auto kilometer splits.</li>
+                    <li>Builds heart rate and cadence training zones with Aerobic Efficiency Factor (EF).</li>
+                  </ul>
                 </div>
 
                 <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-sm'}`}>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-amber-500 mb-1">👁️ Map & Elevation Sync</h3>
-                  <p className="text-xs text-slate-400 leading-normal font-medium">Hover anywhere across your responsive elevation chart. A smart tracking indicator moves along your map path to show you exactly where each milestone happened.</p>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-amber-500 mb-1.5">👁️ Map & Elevation Sync</h3>
+                  <ul className="text-xs text-slate-400 space-y-1 font-medium list-disc pl-4">
+                    <li>Hover across your altitude profile chart to drive a real-time sync map dot.</li>
+                    <li>Pinpoints exactly where your heart rate peaked or your pace changed.</li>
+                  </ul>
                 </div>
               </div>
 
-              <div className={`p-4 rounded-xl border text-center ${theme === 'dark' ? 'bg-blue-950/20 border-blue-900/30 text-blue-400' : 'bg-blue-500/5 border-blue-500/10 text-blue-600'}`}>
-                <p className="text-[11px] font-bold leading-normal">🛡️ <span className="uppercase tracking-wider font-black mr-1">Privacy First:</span> Your workouts are processed entirely in your browser's temporary
-memory. Even if you choose to sign in to save your history, we never store or save your email address. Instead, it is instantly turned into an irreversible, anonymous cryptographic signature (SHA-256) so your identity and your routes stay completely yours!</p>
+              {/* PRIVACY FIRST FOOTER NOTIFICATION ACCENT CONTAINER */}
+              <div className={`p-4 rounded-xl border text-center shadow-inner ${theme === 'dark' ? 'bg-blue-950/20 border-blue-900/30 text-blue-400' : 'bg-blue-500/5 border-blue-500/10 text-blue-600'}`}>
+                <p className="text-[11px] font-bold leading-normal">🛡️ <span className="uppercase tracking-wider font-black mr-1">Privacy First:</span> Your workouts are processed entirely in your browser's temporary memory. Even if you choose to sign in to save your history, we never store or save your email address. Instead, it is instantly turned into an irreversible, anonymous cryptographic signature (SHA-256) so your identity and your routes stay completely yours!</p>
               </div>
             </div>
 
@@ -509,7 +540,7 @@ memory. Even if you choose to sign in to save your history, we never store or sa
                 </button>
               </form>
 
-              {/* DYNAMIC TRY-OUT TRIGGER ELEMENT LINK INJECTED HERE */}
+              {/* DEMO TRYOUT TRIGGER LINK */}
               <div className="text-center mt-4 pt-1 border-t border-dashed border-slate-500/10">
                 <span className="text-xs text-slate-400">Don't have an activity file handy? </span>
                 <button 
@@ -527,45 +558,6 @@ memory. Even if you choose to sign in to save your history, we never store or sa
 
           </div>
         )}
-
-        {authModalOpen && (
-          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-            <div className={`w-full max-w-sm rounded-2xl border p-6 shadow-2xl relative transition-all ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-800'}`}>
-              <button onClick={() => { setAuthModalOpen(false); setAuthStep(1); setAuthEmail(''); setAuthOTP(''); }} className="absolute top-4 right-4 p-1.5 rounded-lg opacity-60 hover:opacity-100 transition-colors"><X className="w-4 h-4" /></button>
-              
-              <div className="flex items-center space-x-2.5 mb-4">
-                <div className="p-2 bg-blue-500/10 text-blue-500 rounded-xl"><KeyRound className="w-5 h-5" /></div>
-                <div>
-                  <h3 className="font-black text-base tracking-tight">Zero-Knowledge Access</h3>
-                  <p className={`text-[11px] ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>No passwords. No tracking records. Pure security.</p>
-                </div>
-              </div>
-
-              {authStep === 1 ? (
-                <form onSubmit={handleRequestOTP} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">Email Address</label>
-                    <input type="email" required placeholder="Enter email to sign up or log in" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className={`w-full px-3 py-2 rounded-xl border text-sm font-medium transition-all outline-none focus:ring-1 focus:ring-blue-500 ${theme === 'dark' ? 'bg-slate-950 border-slate-800 focus:border-blue-500' : 'bg-slate-50 border-slate-200 focus:bg-white'}`} />
-                  </div>
-                  <button type="submit" disabled={authLoading || !authEmail} className="w-full py-2 bg-blue-600 text-white rounded-xl font-bold">Send Verification Code</button>
-                </form>
-              ) : (
-                <form onSubmit={handleVerifyOTP} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">6-Digit Verification Code</label>
-                    <input type="text" required maxLength={6} pattern="\d{6}" placeholder="------" value={authOTP} onChange={(e) => setAuthOTP(e.target.value)} className="w-full px-4 py-3 rounded-xl border text-center font-black text-xl bg-slate-950 border-slate-800 text-white" />
-                  </div>
-                  <button type="submit" disabled={authLoading || authOTP.length < 6} className="w-full py-2 bg-blue-600 text-white rounded-xl font-bold">Verify & Connect Session</button>
-                </form>
-              )}
-
-              {authError && <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-xs font-bold text-center leading-normal">{authError}</div>}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
 
   return (
     <div className={`flex h-screen overflow-hidden font-sans transition-colors duration-200 ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
