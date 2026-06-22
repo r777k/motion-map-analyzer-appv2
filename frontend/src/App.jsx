@@ -141,7 +141,6 @@ function App() {
       }, {
         headers: { Authorization: `Bearer ${userToken}` }
       });
-      alert("Workout saved securely to your anonymous profile index!");
       if (res.data && res.data.activity_id) {
         setData(prev => ({ ...prev, id: res.data.activity_id }));
       }
@@ -380,7 +379,7 @@ function App() {
             {isDesktopModeEnabled ? (
               <span>📺 Desktop mode detected! For the best experience mapping routes and sliding across split-pane telemetry graphs, we recommend using a full computer screen and mouse.</span>
             ) : (
-              <span>📱 Using a phone browser? For the best workspace layout alignment, please switch your browser settings to <strong>"Request Desktop Site"</strong> or open this app on a computer!</span>
+              <span>📱 Using a phone browser? For the best workspace layout alignment, please switch your browser settings to <strong>"Request Desktop Site"</strong> or best open this app on a computer!</span>
             )}
           </div>
         )}
