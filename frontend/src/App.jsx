@@ -35,6 +35,11 @@ function App() {
   const [historyItems, setHistoryItems] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
+  // --- STRAVA STATE CONTAINERS
+  const [stravaAccessToken, setStravaAccessToken] = useState(localStorage.getItem('strava_access_token') || null);
+  const [stravaFeedItems, setStravaFeedItems] = useState([]);
+  const [stravaFeedLoading, setStravaFeedLoading] = useState(false);
+
   // --- SEARCH AND SORT STATE FILTERS ---
   const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [historySortBy, setHistorySortBy] = useState('date_desc'); 
@@ -75,7 +80,7 @@ function App() {
     }
   }, []);
 
-  // --- STRAVA API OAUTH INCOMING CALLBACK HANDLER ---
+// --- STRAVA API OAUTH INCOMING CALLBACK HANDLER ---
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const stravaCode = urlParams.get("code");
@@ -83,18 +88,21 @@ function App() {
     if (stravaCode) {
       setLoading(true);
       setError(null);
-      // Clean query tokens from the address bar immediately for routing safety
       window.history.replaceState({}, document.title, window.location.pathname);
       
       axios.post(`${API_BASE}/api/auth/strava/exchange`, { code: stravaCode }, {
         headers: userToken ? { Authorization: `Bearer ${userToken}` } : {}
       })
       .then((res) => {
-        // If the user wasn't logged in, log them in automatically with the returned token
         if (res.data && res.data.access_token) {
           const token = res.data.access_token;
           localStorage.setItem('motion_map_token', token);
           setUserToken(token);
+        }
+        if (res.data && res.data.strava_access_token) {
+          const sToken = res.data.strava_access_token;
+          localStorage.setItem('strava_access_token', sToken);
+          setStravaAccessToken(sToken);
         }
         setActiveSidebarTab('history');
       })
@@ -104,6 +112,17 @@ function App() {
       .finally(() => setLoading(false));
     }
   }, [userToken]);
+
+// --- Fetch the Live Strava Feed on View Activation ---
+  useEffect(() => {
+    if (stravaAccessToken && activeSidebarTab === 'history') {
+      setStravaFeedLoading(true);
+      axios.get(`${API_BASE}/api/strava/latest-activities?strava_token=${stravaAccessToken}`)
+        .then(res => setStravaFeedItems(res.data.activities || []))
+        .catch(() => console.error("Could not populate live Strava stream options."))
+        .finally(() => setStravaFeedLoading(false));
+    }
+  }, [stravaAccessToken, activeSidebarTab]);
 
   useEffect(() => {
     if (!isDraggingSplitter) return;
@@ -282,6 +301,19 @@ function App() {
       setData(response.data.data);
     } catch (err) {
       setError(err.message || "An error occurred while loading the demo run workspace.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLoadStravaActivity = async (stravaActivityId) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await axios.get(`${API_BASE}/api/strava/analyze-activity/${stravaActivityId}?token=${stravaAccessToken}`);
+      setData(res.data.data);
+    } catch (err) {
+      setError("Failed to download and parse high-resolution telemetry streams from Strava.");
     } finally {
       setLoading(false);
     }
@@ -505,6 +537,31 @@ function App() {
                     <option value="distance_desc">Sort by: Longest Distance</option>
                     <option value="pace_asc">Sort by: Fastest Pace</option>
                   </select>
+                </div>
+              </div>
+            )}
+
+            {/* NEW EXTENSION: LIVE STRAVA INSTANT FEED SELECTION DRAWER */}
+            {stravaAccessToken && stravaFeedItems.length > 0 && (
+              <div className="mb-5">
+                <h3 className="text-xs font-black uppercase tracking-wider text-[#FC6100] mb-2 flex items-center">
+                  <span className="mr-1.5">🧡</span> Import Recent Strava Activities
+                </h3>
+                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+                  {stravaFeedItems.map(act => (
+                    <div 
+                      key={act.id}
+                      onClick={() => handleLoadStravaActivity(act.id)}
+                      className={`p-3 rounded-xl border cursor-pointer min-w-[170px] max-w-[170px] flex-shrink-0 transition-all ${theme === 'dark' ? 'bg-slate-900 border-slate-800 hover:border-[#FC6100]' : 'bg-white border-slate-200 hover:border-[#FC6100] shadow-sm'}`}
+                    >
+                      <p className="text-[11px] font-black truncate text-slate-800 dark:text-slate-200">{act.name}</p>
+                      <p className="text-[10px] font-bold text-slate-400 mt-0.5">{act.start_date.split('T')[0]}</p>
+                      <div className="flex justify-between items-center mt-2">
+                        <span className="text-xs font-black text-blue-500">{act.distance_km} km</span>
+                        <span className="text-[10px] font-medium text-slate-400">⏱️ {Math.floor(act.duration_s / 60)}m</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
