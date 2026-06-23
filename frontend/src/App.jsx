@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios'; // Fixed module package registration string
+import axios from 'axios';
 import { UploadCloud, Info, X, Sun, Moon, Download, Camera, LogIn, LogOut, KeyRound, Calendar, MapPin, Trash2, Search, ArrowUpDown, BarChart3, Clock, Milestone } from 'lucide-react';
 
 import RunSummary from './components/RunSummary';
@@ -35,14 +35,14 @@ function App() {
   const [historyItems, setHistoryItems] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // --- STRAVA STATE CONTAINERS
-  const [stravaAccessToken, setStravaAccessToken] = useState(localStorage.getItem('strava_access_token') || null);
-  const [stravaFeedItems, setStravaFeedItems] = useState([]);
-  const [stravaFeedLoading, setStravaFeedLoading] = useState(false);
-
   // --- SEARCH AND SORT STATE FILTERS ---
   const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [historySortBy, setHistorySortBy] = useState('date_desc'); 
+
+  // --- INTEGRATED STRAVA FEED STATE CORES ---
+  const [stravaAccessToken, setStravaAccessToken] = useState(localStorage.getItem('strava_access_token') || null);
+  const [stravaFeedItems, setStravaFeedItems] = useState([]);
+  const [stravaFeedLoading, setStravaFeedLoading] = useState(false);
 
   // --- MOBILE SCREEN & HARDWARE SENSING CHASSIS ---
   const [isMobileDevice, setIsMobileDevice] = useState(false);
@@ -80,7 +80,7 @@ function App() {
     }
   }, []);
 
-// --- STRAVA API OAUTH INCOMING CALLBACK HANDLER ---
+  // --- STRAVA API OAUTH INCOMING CALLBACK HANDLER ---
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const stravaCode = urlParams.get("code");
@@ -113,7 +113,7 @@ function App() {
     }
   }, [userToken]);
 
-// --- Fetch the Live Strava Feed on View Activation ---
+  // --- POPULATE LIVE STRAVA FEED CAROUSEL OPTIONS ---
   useEffect(() => {
     if (stravaAccessToken && activeSidebarTab === 'history') {
       setStravaFeedLoading(true);
@@ -177,6 +177,24 @@ function App() {
       setData(historicalWorkspace);
     } catch (err) {
       setError("Failed to stream saved activity analytics profiles.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- STREAM AND PARSE LIVE HIGH-RES STRAVA WORKOUT ---
+  const handleLoadStravaActivity = async (stravaActivityId) => {
+    setLoading(true);
+    setError(null);
+    try {
+      // FIX: Added the application authorization token parameter header array configuration mapping block 
+      // so the backend can verify user database records on live stream initialization passes.
+      const res = await axios.get(`${API_BASE}/api/strava/analyze-activity/${stravaActivityId}?token=${stravaAccessToken}`, {
+        headers: userToken ? { Authorization: `Bearer ${userToken}` } : {}
+      });
+      setData(res.data.data);
+    } catch (err) {
+      setError("Failed to download and parse high-resolution telemetry streams from Strava.");
     } finally {
       setLoading(false);
     }
@@ -301,19 +319,6 @@ function App() {
       setData(response.data.data);
     } catch (err) {
       setError(err.message || "An error occurred while loading the demo run workspace.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLoadStravaActivity = async (stravaActivityId) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await axios.get(`${API_BASE}/api/strava/analyze-activity/${stravaActivityId}?token=${stravaAccessToken}`);
-      setData(res.data.data);
-    } catch (err) {
-      setError("Failed to download and parse high-resolution telemetry streams from Strava.");
     } finally {
       setLoading(false);
     }
@@ -541,7 +546,7 @@ function App() {
               </div>
             )}
 
-            {/* NEW EXTENSION: LIVE STRAVA INSTANT FEED SELECTION DRAWER */}
+            {/* RESTORED CAROUSEL: LIVE STRAVA INSTANT FEED SELECTION DRAWER */}
             {stravaAccessToken && stravaFeedItems.length > 0 && (
               <div className="mb-5">
                 <h3 className="text-xs font-black uppercase tracking-wider text-[#FC6100] mb-2 flex items-center">
@@ -579,7 +584,6 @@ function App() {
                 filteredAndSortedHistory.map(item => (
                   <div key={item.id} onClick={() => handleLoadSavedActivity(item.id)} className={`p-4 rounded-xl border cursor-pointer flex items-center justify-between transition-all group ${theme === 'dark' ? 'bg-slate-950 border-slate-800 hover:border-blue-500 hover:bg-slate-900' : 'bg-slate-50 border-slate-200 hover:border-blue-500 hover:bg-white'}`}>
                     <div className="space-y-0.5">
-                      {/* Line 1: Date Time, Location */}
                       <div className="flex items-center space-x-1.5 text-sm font-black tracking-tight text-slate-800 dark:text-slate-200">
                         <Calendar className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
                         <span>{item.start_time.split(' ')[0]}</span>
@@ -587,7 +591,6 @@ function App() {
                         <span className="font-bold text-xs text-slate-500 dark:text-slate-400 max-w-[280px] truncate">{item.location_city || 'Local Route'}</span>
                       </div>
                       
-                      {/* Line 2: Distance Duration Avg Pace */}
                       <div className="flex items-center space-x-2 text-xs font-bold text-slate-400">
                         <span className="text-blue-500 text-sm font-black">
                           {item.distance_km ? `${item.distance_km.toFixed(2)} km` : '- km'}
@@ -697,12 +700,10 @@ function App() {
                   </button>
                 </div>
 
-                {/* INTEGRATED ORANGE NATIVE STRAVA CONNECTIVITY SUITE */}
                 <button
                   type="button"
                   disabled={loading}
                   onClick={() => {
-                    // Pulls client registration values from your deployment variables manifest
                     const clientID = import.meta.env.VITE_STRAVA_CLIENT_ID || '260297';
                     const redirectURI = encodeURIComponent("https://motion-map-analyzer-appv2.vercel.app");
                     window.location.href = `https://www.strava.com/oauth/authorize?client_id=${clientID}&response_type=code&redirect_uri=${redirectURI}&approval_prompt=auto&scope=activity:read_all`;
