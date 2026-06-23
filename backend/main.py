@@ -209,16 +209,11 @@ async def exchange_strava_code(payload: dict, request: Request):
     if not strava_athlete_id:
         raise HTTPException(status_code=400, detail="Failed to retrieve identity signatures from Strava.")
 
-    # Check if the incoming request is from an already authenticated user token session
     current_user_id = extract_optional_user_id(request)
     
-    # Optional Secure Action: Save token_data["refresh_token"] to database tables here if desired.
-    
-    # If the user is NOT logged in via email OTP, create a zero-knowledge account via Strava ID!
     access_token = None
     if not current_user_id:
         import hashlib
-        # Generate a deterministic unique hash for this Strava ID to maintain zero-knowledge privacy
         blind_strava_hash = hashlib.sha256(f"strava_{strava_athlete_id}".encode('utf-8')).hexdigest()
         
         with get_db_cursor() as cur:
@@ -230,7 +225,6 @@ async def exchange_strava_code(payload: dict, request: Request):
                 cur.execute("INSERT INTO users (hashed_email) VALUES (%s) RETURNING id;", (blind_strava_hash,))
                 current_user_id = cur.fetchone()[0]
                 
-        # Issue a standard 7-day session lease JWT token to log the frontend in automatically
         access_token = jwt.encode(
             {"user_id": str(current_user_id), "exp": datetime.now(timezone.utc) + timedelta(days=7)}, 
             JWT_SECRET_KEY, 
@@ -241,7 +235,42 @@ async def exchange_strava_code(payload: dict, request: Request):
         "status": "connected", 
         "access_token": access_token, 
         "token_type": "bearer" if access_token else None,
+        # Crucial fix: Send Strava's access token back to the client to fetch recent activities
+        "strava_access_token": token_data.get("access_token"),
         "athlete": athlete_data
+    }
+
+# ----------------------------------------------------------------------------------
+# NEW ENHANCEMENT: GET LATEST STRAVA ACTIVITIES FEED
+# ----------------------------------------------------------------------------------
+@app.get("/api/strava/latest-activities")
+async def get_latest_strava_activities(strava_token: str):
+    """
+    Fetches the 5 most recent activities from the user's Strava profile feed.
+    """
+    url = "https://www.strava.com/api/v3/athlete/activities"
+    headers = {"Authorization": f"Bearer {strava_token}"}
+    params = {"per_page": 5}
+    
+    async with httpx.AsyncClient() as client:
+        res = await client.get(url, headers=headers, params=params)
+        
+    if res.status_code != 200:
+        raise HTTPException(status_code=400, detail="Failed to grab recent activity list from Strava API.")
+        
+    activities = res.json()
+    return {
+        "activities": [
+            {
+                "id": str(act.get("id")),
+                "name": act.get("name"),
+                "type": act.get("type"),
+                "distance_km": round(act.get("distance", 0) / 1000.0, 2),
+                "duration_s": act.get("moving_time"),
+                "start_date": act.get("start_date_local")
+            }
+            for act in activities if act.get("type") in ["Run", "Walk"]
+        ]
     }
 
 # ----------------------------------------------------------------------------------
