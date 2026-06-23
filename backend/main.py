@@ -697,6 +697,6 @@ async def export_snapshot(payload: SnapshotRequest):
         await page.goto(f"file://{template_path}")
         await page.evaluate("data => window.renderWorkoutCard(data)", payload.model_dump())
         await page.wait_for_function("window.isRenderCompleteFlag === true", timeout=7000)
-        image_buffer = await page.screenshot(type=\"png\", full_page=False)
+        image_buffer = await page.screenshot(type="png", full_page=False)
         await browser.close()
         return Response(content=image_buffer, media_type="image/png")
