@@ -25,7 +25,6 @@ from geopy.geocoders import Nominatim
 # Import custom Neon thread pooling engine and blind hashing primitive
 from database import get_db_cursor, blind_hash_string
 
-
 # Import core engine parsing functions
 from engine import (
     parse_tcx_to_rows, parse_fit_to_rows, prepare_run_df, add_deltas, add_smoothed_speed,
@@ -36,7 +35,6 @@ from engine import (
 )
 
 app = FastAPI(title="Motion Map Analyzer", version="2.0")
-
 
 # Look for the CORS section and update it to look like this:
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
@@ -84,7 +82,7 @@ class SnapshotRequest(BaseModel):
     config: dict
 
 # ----------------------------------------------------------------------------------
-# JSON & DICTIONARY STRUCTURAL KEY ORDER RECONSTRUCTION ENGINE link
+# JSON & DICTIONARY STRUCTURAL KEY ORDER RECONSTRUCTION ENGINE
 # ----------------------------------------------------------------------------------
 def reorder_dict_keys(source_dict: dict, ordered_keys: list) -> dict:
     """Rebuilds a dictionary to strictly follow a predefined sequence of keys."""
@@ -170,7 +168,6 @@ def reverse_geocode_city(lat, lon):
         pass
     return "Local Route"
 
-
 # Ensure your cloud tokens are fetched from the environment variables
 STRAVA_CLIENT_ID = os.getenv("STRAVA_CLIENT_ID")
 STRAVA_CLIENT_SECRET = os.getenv("STRAVA_CLIENT_SECRET")
@@ -235,13 +232,12 @@ async def exchange_strava_code(payload: dict, request: Request):
         "status": "connected", 
         "access_token": access_token, 
         "token_type": "bearer" if access_token else None,
-        # Crucial fix: Send Strava's access token back to the client to fetch recent activities
         "strava_access_token": token_data.get("access_token"),
         "athlete": athlete_data
     }
 
 # ----------------------------------------------------------------------------------
-# NEW ENHANCEMENT: GET LATEST STRAVA ACTIVITIES FEED
+# GET LATEST STRAVA ACTIVITIES FEED
 # ----------------------------------------------------------------------------------
 @app.get("/api/strava/latest-activities")
 async def get_latest_strava_activities(strava_token: str):
@@ -274,7 +270,7 @@ async def get_latest_strava_activities(strava_token: str):
     }
 
 # ----------------------------------------------------------------------------------
-# STRAVA TELEMETRY STREAM INGEST ENGINE (REPAIRED & STRUCTURALLY REALIGNED)
+# STRAVA TELEMETRY STREAM INGEST ENGINE 
 # ----------------------------------------------------------------------------------
 @app.get("/api/strava/analyze-activity/{activity_id}")
 async def analyze_strava_activity(activity_id: str, token: str, request: Request):
@@ -284,7 +280,6 @@ async def analyze_strava_activity(activity_id: str, token: str, request: Request
     """
     headers = {"Authorization": f"Bearer {token}"}
     
-    # Step 1: Fetch activity root metadata to extract accurate starting timestamp
     activity_url = f"https://www.strava.com/api/v3/activities/{activity_id}"
     async with httpx.AsyncClient() as client:
         act_res = await client.get(activity_url, headers=headers)
@@ -292,7 +287,6 @@ async def analyze_strava_activity(activity_id: str, token: str, request: Request
             raise HTTPException(status_code=400, detail="Failed to retrieve activity meta-details from Strava.")
         activity_info = act_res.json()
         
-        # Step 2: Fetch detailed tracking telemetry stream arrays
         streams_url = f"https://www.strava.com/api/v3/activities/{activity_id}/streams"
         params = {
             "keys": "latlng,altitude,time,velocity_smooth,heartrate,cadence",
@@ -305,15 +299,12 @@ async def analyze_strava_activity(activity_id: str, token: str, request: Request
         
     strava_streams = res.json()
     
-    # Parse baseline starting time signature safely to prevent datetime format collisions
     start_date_str = activity_info.get("start_date_local") or activity_info.get("start_date")
     if start_date_str:
-        # Converts ISO strings like "2026-06-21T05:59:32Z" into timezone aware instances
         base_start_time = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
     else:
         base_start_time = datetime.now(timezone.utc)
 
-    # Ingest individual metrics arrays from streams payloads
     time_data = strava_streams.get("time", {}).get("data", [])
     latlng_data = strava_streams.get("latlng", {}).get("data", [])
     alt_data = strava_streams.get("altitude", {}).get("data", [])
@@ -322,10 +313,8 @@ async def analyze_strava_activity(activity_id: str, token: str, request: Request
     
     transformed_rows = []
     for i in range(len(time_data)):
-        # Increment relative streaming seconds against baseline starting clock
         point_timestamp = base_start_time + timedelta(seconds=time_data[i])
         
-        # Build dictionary records matching engine naming rules exactly
         point = {
             "time": point_timestamp.strftime("%Y-%m-%d %H:%M:%S"),
             "latitude": latlng_data[i][0] if i < len(latlng_data) else None,
@@ -336,7 +325,6 @@ async def analyze_strava_activity(activity_id: str, token: str, request: Request
         }
         transformed_rows.append(point)
         
-    # Step 3: Instantiate complete Pandas DataFrame and feed it into the execution pipeline
     raw_run_df = pd.DataFrame(transformed_rows)
     if raw_run_df.empty:
         raise HTTPException(status_code=400, detail="No valid tracking data found from Strava streams.")
@@ -385,7 +373,7 @@ async def analyze_strava_activity(activity_id: str, token: str, request: Request
     track_points = tp_df[cols_to_extract].to_dict(orient="records")
     runstats["location_city"] = reverse_geocode_city(temp_plot_df.iloc[0]["latitude"], temp_plot_df.iloc[0]["longitude"]) if not temp_plot_df.empty else "Local Route"
 
-    # Match pre-existing database records to sync stateful history links cleanly
+    # FIX: Indentation correction applied to the database check catch statement block below
     current_user_id = extract_optional_user_id(request)
     existing_id = None
     if current_user_id:
@@ -394,7 +382,8 @@ async def analyze_strava_activity(activity_id: str, token: str, request: Request
                 cur.execute("SELECT id FROM activities WHERE user_id = %s AND original_start_time = %s;", (current_user_id, orig_start_str))
                 match_row = cur.fetchone()
                 if match_row: existing_id = str(match_row[0])
-            except Exception: pass
+        except Exception: 
+            pass
 
     raw_payload = {
         "status": "success",
@@ -409,7 +398,6 @@ async def analyze_strava_activity(activity_id: str, token: str, request: Request
     }
     raw_payload["data"] = normalize_activity_payload(raw_payload["data"])
     return JSONResponse(content=clean_nans(raw_payload))
-
 
 # ----------------------------------------------------------------------------------
 # SECURITY HELPER ROUTINES
@@ -600,7 +588,6 @@ async def analyze_run(
                 "trackpoints": track_points
             }
         }
-        # Enforce ordering directly at engine generation
         raw_payload["data"] = normalize_activity_payload(raw_payload["data"])
         return JSONResponse(content=clean_nans(raw_payload))
     except HTTPException as he: raise he
@@ -679,7 +666,6 @@ async def get_single_activity(activity_id: str, current_user_id: str = Depends(g
         if not record:
             raise HTTPException(status_code=404, detail="Requested run log not found.")
             
-        # Re-apply strict layout keys arrangement to correct database optimizations pass
         normalized_payload = normalize_activity_payload(record[0])
         return {"status": "success", "data": normalized_payload}
     except Exception as e:
@@ -711,6 +697,6 @@ async def export_snapshot(payload: SnapshotRequest):
         await page.goto(f"file://{template_path}")
         await page.evaluate("data => window.renderWorkoutCard(data)", payload.model_dump())
         await page.wait_for_function("window.isRenderCompleteFlag === true", timeout=7000)
-        image_buffer = await page.screenshot(type="png", full_page=False)
+        image_buffer = await page.screenshot(type=\"png\", full_page=False)
         await browser.close()
         return Response(content=image_buffer, media_type="image/png")
