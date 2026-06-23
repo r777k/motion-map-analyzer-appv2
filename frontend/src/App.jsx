@@ -89,9 +89,14 @@ function App() {
       axios.post(`${API_BASE}/api/auth/strava/exchange`, { code: stravaCode }, {
         headers: userToken ? { Authorization: `Bearer ${userToken}` } : {}
       })
-      .then(() => {
+      .then((res) => {
+        // If the user wasn't logged in, log them in automatically with the returned token
+        if (res.data && res.data.access_token) {
+          const token = res.data.access_token;
+          localStorage.setItem('motion_map_token', token);
+          setUserToken(token);
+        }
         setActiveSidebarTab('history');
-        if (userToken) fetchUserHistoryList();
       })
       .catch((err) => {
         setError(err.response?.data?.detail || "Failed to verify credentials linkage with your Strava account profile.");
