@@ -601,7 +601,7 @@ async def analyze_run(
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
 # ----------------------------------------------------------------------------------
-# ZERO-KNOWLEDGE RUN HISTORY LOG STORAGE CONTROLLERS
+# ZERO-KNOWLEDGE RUN HISTORY LOG STORAGE CONTROLLERS (FIXED DEDUPLICATION RETURN)
 # ----------------------------------------------------------------------------------
 @app.post("/api/activities")
 async def save_activity(payload: SaveActivityRequest, current_user_id: str = Depends(get_current_user_id)):
@@ -616,8 +616,16 @@ async def save_activity(payload: SaveActivityRequest, current_user_id: str = Dep
     try:
         with get_db_cursor() as cur:
             cur.execute("SELECT id FROM activities WHERE user_id = %s AND original_start_time = %s;", (current_user_id, orig_start_time))
-            if cur.fetchone():
-                return {"status": "success", "detail": "Activity already saved."}
+            existing_row = cur.fetchone()
+            
+            # FIX: If the workout is already present, return its actual database ID row
+            # to let the React UI toggle statefully into the green "Saved to Cloud" pill!
+            if existing_row:
+                return {
+                    "status": "success", 
+                    "detail": "Activity already saved.", 
+                    "activity_id": str(existing_row[0])
+                }
 
             raw_dist = sum_data.get("moving_distance_m", 0)
             distance_km = round(float(raw_dist) / 1000.0, 2) if raw_dist else round(float(sum_data.get("distance_km", 0)), 2)
