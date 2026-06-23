@@ -269,7 +269,7 @@ async def get_latest_strava_activities(strava_token: str):
     }
 
 # ----------------------------------------------------------------------------------
-# STRAVA TELEMETRY STREAM INGEST ENGINE (REPAIRED & STRUCTURALLY REALIGNED)
+# STRAVA TELEMETRY STREAM INGEST ENGINE (REPAIRED & TIMECODE ALIGNED)
 # ----------------------------------------------------------------------------------
 @app.get("/api/strava/analyze-activity/{activity_id}")
 async def analyze_strava_activity(activity_id: str, token: str, request: Request):
@@ -301,7 +301,9 @@ async def analyze_strava_activity(activity_id: str, token: str, request: Request
     activity_type = activity_info.get("type", "Run")
     is_running_activity = activity_type == "Run"
 
-    start_date_str = activity_info.get("start_date_local") or activity_info.get("start_date")
+    # FIX: Enforce strict UTC baseline start_date extraction to mimic native .fit/.tcx file streams.
+    # This prevents double-timezone shifting when coordinate offsets are calculated downstream.
+    start_date_str = activity_info.get("start_date")
     if start_date_str:
         base_start_time = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
     else:
@@ -317,7 +319,6 @@ async def analyze_strava_activity(activity_id: str, token: str, request: Request
     for i in range(len(time_data)):
         point_timestamp = base_start_time + timedelta(seconds=time_data[i])
         
-        # STRATEGIC CORRECTION: Handle single foot rotation vs dual foot step spm cadence doubling 
         raw_cadence = cad_data[i] if i < len(cad_data) else None
         if raw_cadence is not None and is_running_activity:
             raw_cadence = raw_cadence * 2
