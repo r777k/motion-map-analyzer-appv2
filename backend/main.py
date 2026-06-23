@@ -172,13 +172,74 @@ STRAVA_CLIENT_ID = os.getenv("STRAVA_CLIENT_ID")
 STRAVA_CLIENT_SECRET = os.getenv("STRAVA_CLIENT_SECRET")
 
 # ----------------------------------------------------------------------------------
+# BACKGROUND SECURE TOKEN AUTO-REFRESH ENGINE
+# ----------------------------------------------------------------------------------
+async def get_valid_strava_token(user_id: str) -> str:
+    """
+    Checks if a user's Strava access token is expired. If expired, automatically 
+    fires a refresh handshake with Strava, updates the database, and returns a valid token.
+    """
+    with get_db_cursor() as cur:
+        cur.execute(
+            "SELECT access_token, refresh_token, expires_at FROM user_strava_tokens WHERE user_id = %s;",
+            (user_id,)
+        )
+        token_row = cur.fetchone()
+        
+    if not token_row:
+        raise HTTPException(status_code=400, detail="No linked Strava profile associated with this account session.")
+        
+    access_token, refresh_token, expires_at = token_row
+    
+    # Ensure expires_at is timezone-aware for an accurate chronological comparison
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+        
+    # If the token is valid for the next 5 minutes, reuse it safely
+    if datetime.now(timezone.utc) < (expires_at - timedelta(minutes=5)):
+        return access_token
+        
+    # CORE REFRESH LIFECYCLE HANDSHAKE: Fire a token refresh query to Strava's servers
+    async with httpx.AsyncClient() as client:
+        res = await client.post(
+            "https://www.strava.com/oauth/token",
+            data={
+                "client_id": STRAVA_CLIENT_ID,
+                "client_secret": STRAVA_CLIENT_SECRET,
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token
+            }
+        )
+        
+    if res.status_code != 200:
+        raise HTTPException(status_code=400, detail="Credentials lease renewal rejected by Strava's security gateway.")
+        
+    refresh_data = res.json()
+    new_access_token = refresh_data["access_token"]
+    new_refresh_token = refresh_data.get("refresh_token", refresh_token)
+    new_expiry_time = datetime.now(timezone.utc) + timedelta(seconds=refresh_data["expires_in"])
+    
+    # Update relational tables with the updated secure access token row
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            UPDATE user_strava_tokens 
+            SET access_token = %s, refresh_token = %s, expires_at = %s 
+            WHERE user_id = %s;
+            """,
+            (new_access_token, new_refresh_token, new_expiry_time, user_id)
+        )
+        
+    return new_access_token
+
+# ----------------------------------------------------------------------------------
 # STRAVA OAUTH EXCHANGE ROUTER
 # ----------------------------------------------------------------------------------
 @app.post("/api/auth/strava/exchange")
 async def exchange_strava_code(payload: dict, request: Request):
     """
-    Exchanges an authorization code from frontend for a refresh_token 
-    and short-lived access_token. Supports both logged-in sessions and direct sign-ins.
+    Exchanges an authorization code from frontend for long-lived refresh tokens.
+    Persists credentials to deep relational state tables securely.
     """
     code = payload.get("code")
     if not code:
@@ -207,6 +268,7 @@ async def exchange_strava_code(payload: dict, request: Request):
 
     current_user_id = extract_optional_user_id(request)
     
+    # Auto-login behavior: If the user is unauthenticated, instantiate an anonymous account record
     access_token = None
     if not current_user_id:
         import hashlib
@@ -227,11 +289,23 @@ async def exchange_strava_code(payload: dict, request: Request):
             algorithm=ALGORITHM
         )
 
+    # PERSIST TO DATABASE: Save the multi-user credentials securely into Neon tables
+    expiry_time = datetime.now(timezone.utc) + timedelta(seconds=token_data["expires_in"])
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO user_strava_tokens (user_id, strava_athlete_id, access_token, refresh_token, expires_at)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (strava_athlete_id) DO UPDATE 
+            SET access_token = EXCLUDED.access_token, refresh_token = EXCLUDED.refresh_token, expires_at = EXCLUDED.expires_at;
+            """,
+            (current_user_id, strava_athlete_id, token_data["access_token"], token_data["refresh_token"], expiry_time)
+        )
+
     return {
         "status": "connected", 
         "access_token": access_token, 
         "token_type": "bearer" if access_token else None,
-        "strava_access_token": token_data.get("access_token"),
         "athlete": athlete_data
     }
 
@@ -239,10 +313,13 @@ async def exchange_strava_code(payload: dict, request: Request):
 # GET LATEST STRAVA ACTIVITIES FEED
 # ----------------------------------------------------------------------------------
 @app.get("/api/strava/latest-activities")
-async def get_latest_strava_activities(strava_token: str):
+async def get_latest_strava_activities(current_user_id: str = Depends(get_current_user_id)):
     """
-    Fetches the 5 most recent activities from the user's Strava profile feed.
+    Fetches the 5 most recent activities. Leverages automatic token refreshing workers.
     """
+    # Grab the active user's valid token directly from the database framework
+    strava_token = await get_valid_strava_token(current_user_id)
+    
     url = "https://www.strava.com/api/v3/athlete/activities"
     headers = {"Authorization": f"Bearer {strava_token}"}
     params = {"per_page": 5}
@@ -272,12 +349,12 @@ async def get_latest_strava_activities(strava_token: str):
 # STRAVA TELEMETRY STREAM INGEST ENGINE (REPAIRED & TIMECODE ALIGNED)
 # ----------------------------------------------------------------------------------
 @app.get("/api/strava/analyze-activity/{activity_id}")
-async def analyze_strava_activity(activity_id: str, token: str, request: Request):
+async def analyze_strava_activity(activity_id: str, request: Request, current_user_id: str = Depends(get_current_user_id)):
     """
-    Fetches raw time-series metrics directly from Strava's high-resolution streams
-    and maps them into your existing internal engine models with complete type safety.
+    Processes high-resolution stream series. Auto-manages user authorization leases.
     """
-    headers = {"Authorization": f"Bearer {token}"}
+    strava_token = await get_valid_strava_token(current_user_id)
+    headers = {"Authorization": f"Bearer {strava_token}"}
     
     activity_url = f"https://www.strava.com/api/v3/activities/{activity_id}"
     async with httpx.AsyncClient() as client:
