@@ -466,7 +466,12 @@ function App() {
 
         {/* LOGO TITLE SECTION */}
         <header className="flex flex-col items-center mb-10 text-center flex-shrink-0">
-          <h1 className="text-4xl font-black tracking-tight mb-1">👟📍📈 Motion Map Analyzer</h1>
+          <img 
+            src="/logo.png" 
+            alt="Motion Map Analyzer Logo" 
+            className="w-24 h-24 mb-4 select-none pointer-events-none drop-shadow-lg" 
+          />
+          <h1 className="text-4xl font-black tracking-tight mb-1">Motion Map Analyzer</h1>
           <p className={`text-xs font-bold uppercase tracking-widest ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Interactive Workout Analytics Workspace</p>
         </header>
 
@@ -733,11 +738,18 @@ function App() {
       >
         <header className={`pb-4 border-b flex justify-between items-start flex-shrink-0 ${theme === 'dark' ? 'border-slate-800' : 'border-slate-200'}`}>
           <div>
-            <h1 className="text-lg font-black tracking-tight flex items-center"><span className="mr-2">👟📍📈</span>Motion Map Analyzer</h1>
+            {/* REPLACED EMOBIS WITH PROPORTIONAL GRAPHIC ICON INLINE NODE */}
+            <h1 className="text-lg font-black tracking-tight flex items-center space-x-2">
+              <img 
+                src="/logo.png" 
+                alt="Logo" 
+                className="w-6 h-6 flex-shrink-0 select-none pointer-events-none" 
+              />
+              <span>Motion Map Analyzer</span>
+            </h1>
             <div className="flex items-center space-x-2 mt-2">
               <button onClick={exportToCSV} className={`px-2 py-1 text-[10px] font-bold rounded border ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-slate-200 text-slate-600 shadow-sm'}`}><Download className="w-3 h-3 inline mr-1" />Export CSV</button>
               <button onClick={captureVisualSnapshot} className={`px-2 py-1 text-[10px] font-bold rounded border ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-slate-200 text-slate-600 shadow-sm'}`}><Camera className="w-3 h-3 inline mr-1" />Share Card</button>
-              
               {userToken && data.summary?.start_time && (
                 data.id ? (
                   <span className="px-2 py-1 text-[10px] font-black bg-emerald-600/10 border border-emerald-500/20 text-emerald-500 rounded select-none">✓ Saved to Cloud</span>
