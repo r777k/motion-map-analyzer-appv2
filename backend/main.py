@@ -25,6 +25,7 @@ from geopy.geocoders import Nominatim
 # Import custom Neon thread pooling engine and blind hashing primitive
 from database import get_db_cursor, blind_hash_string
 
+
 # Import core engine parsing functions
 from engine import (
     parse_tcx_to_rows, parse_fit_to_rows, prepare_run_df, add_deltas, add_smoothed_speed,
@@ -168,6 +169,141 @@ def reverse_geocode_city(lat, lon):
     except Exception:
         pass
     return "Local Route"
+
+
+# Ensure your cloud tokens are fetched from the environment variables
+STRAVA_CLIENT_ID = os.getenv("STRAVA_CLIENT_ID")
+STRAVA_CLIENT_SECRET = os.getenv("STRAVA_CLIENT_SECRET")
+
+# ----------------------------------------------------------------------------------
+# STRAVA OAUTH EXCHANGE ROUTER
+# ----------------------------------------------------------------------------------
+@app.post("/api/auth/strava/exchange")
+async def exchange_strava_code(payload: dict, request: Request):
+    """
+    Exchanges an authorization code from frontend for a refresh_token 
+    and short-lived access_token. Supports both logged-in sessions and direct sign-ins.
+    """
+    code = payload.get("code")
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing authorization code from Strava.")
+        
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://www.strava.com/oauth/token",
+            data={
+                "client_id": STRAVA_CLIENT_ID,
+                "client_secret": STRAVA_CLIENT_SECRET,
+                "code": code,
+                "grant_type": "authorization_code"
+            }
+        )
+        
+    if response.status_code != 200:
+        raise HTTPException(status_code=400, detail="Failed to exchange token with Strava.")
+        
+    token_data = response.json()
+    athlete_data = token_data.get("athlete", {})
+    strava_athlete_id = str(athlete_data.get("id"))
+    
+    if not strava_athlete_id:
+        raise HTTPException(status_code=400, detail="Failed to retrieve identity signatures from Strava.")
+
+    # Check if the incoming request is from an already authenticated user token session
+    current_user_id = extract_optional_user_id(request)
+    
+    # Optional Secure Action: Save token_data["refresh_token"] to database tables here if desired.
+    
+    # If the user is NOT logged in via email OTP, create a zero-knowledge account via Strava ID!
+    access_token = None
+    if not current_user_id:
+        import hashlib
+        # Generate a deterministic unique hash for this Strava ID to maintain zero-knowledge privacy
+        blind_strava_hash = hashlib.sha256(f"strava_{strava_athlete_id}".encode('utf-8')).hexdigest()
+        
+        with get_db_cursor() as cur:
+            cur.execute("SELECT id FROM users WHERE hashed_email = %s;", (blind_strava_hash,))
+            user_record = cur.fetchone()
+            if user_record:
+                current_user_id = user_record[0]
+            else:
+                cur.execute("INSERT INTO users (hashed_email) VALUES (%s) RETURNING id;", (blind_strava_hash,))
+                current_user_id = cur.fetchone()[0]
+                
+        # Issue a standard 7-day session lease JWT token to log the frontend in automatically
+        access_token = jwt.encode(
+            {"user_id": str(current_user_id), "exp": datetime.now(timezone.utc) + timedelta(days=7)}, 
+            JWT_SECRET_KEY, 
+            algorithm=ALGORITHM
+        )
+
+    return {
+        "status": "connected", 
+        "access_token": access_token, 
+        "token_type": "bearer" if access_token else None,
+        "athlete": athlete_data
+    }
+
+# ----------------------------------------------------------------------------------
+# STRAVA TELEMETRY STREAM INGEST ENGINE 
+# ----------------------------------------------------------------------------------
+@app.get("/api/strava/analyze-activity/{activity_id}")
+async def analyze_strava_activity(activity_id: str, token: str):
+    """
+    Fetches raw time-series metrics directly from Strava's high-resolution streams
+    and maps them into your existing internal engine models.
+    """
+    # Note: In production, fetch the valid token or auto-refresh it using your refresh_token handler
+    streams_url = f"https://www.strava.com/api/v3/activities/{activity_id}/streams"
+    params = {
+        "keys": "latlng,altitude,time,velocity_smooth,heartrate,cadence",
+        "key_by_type": "true"
+    }
+    
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    async with httpx.AsyncClient() as client:
+        res = await client.get(streams_url, params=params, headers=headers)
+        
+    if res.status_code != 200:
+        raise HTTPException(status_code=400, detail="Failed to retrieve tracking telemetry from Strava.")
+        
+    strava_streams = res.json()
+    
+    # TRANSFORM DATA FOR ENGINE: Reassemble separate key series into unified rows
+    # This precisely recreates the format generated by parse_tcx_to_rows or parse_fit_to_rows!
+    transformed_rows = []
+    time_data = strava_streams.get("time", {}).get("data", [])
+    latlng_data = strava_streams.get("latlng", {}).get("data", [])
+    alt_data = strava_streams.get("altitude", {}).get("data", [])
+    hr_data = strava_streams.get("heartrate", {}).get("data", [])
+    cad_data = strava_streams.get("cadence", {}).get("data", [])
+    
+    # We loop over the stream arrays to compile consistent points dictionary rows
+    for i in range(len(time_data)):
+        point = {
+            "time": time_data[i],
+            "lat": latlng_data[i][0] if i < len(latlng_data) else None,
+            "lon": latlng_data[i][1] if i < len(latlng_data) else None,
+            "altitude": alt_data[i] if i < len(alt_data) else None,
+            "heart_rate": hr_data[i] if i < len(hr_data) else None,
+            "cadence": cad_data[i] if i < len(cad_data) else None,
+        }
+        transformed_rows.append(point)
+        
+    # PROCESS VIA YOUR EXISTING COMPONENT EQUATIONS PIPELINE
+    df = prepare_run_df(transformed_rows)
+    df = add_deltas(df)
+    df = add_smoothed_speed(df)
+    
+    # Return the exact unified JSON response layout payload structure your React UI is expecting!
+    return {"data": {
+        "summary": compute_run_stats(df),
+        "segments": summarize_motion_segments(df),
+        "trackpoints": collapse_run_streams_for_map(df),
+        "performance": compute_performance_stats(df)
+    }}
+
 
 # ----------------------------------------------------------------------------------
 # SECURITY HELPER ROUTINES
