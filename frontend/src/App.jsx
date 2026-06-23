@@ -40,7 +40,6 @@ function App() {
   const [historySortBy, setHistorySortBy] = useState('date_desc'); 
 
   // --- INTEGRATED STRAVA FEED STATE CORES ---
-  const [stravaAccessToken, setStravaAccessToken] = useState(localStorage.getItem('strava_access_token') || null);
   const [stravaFeedItems, setStravaFeedItems] = useState([]);
   const [stravaFeedLoading, setStravaFeedLoading] = useState(false);
 
@@ -80,7 +79,7 @@ function App() {
     }
   }, []);
 
-  // --- STRAVA API OAUTH INCOMING CALLBACK HANDLER ---
+// --- STRAVA API OAUTH INCOMING CALLBACK HANDLER ---
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const stravaCode = urlParams.get("code");
@@ -99,12 +98,8 @@ function App() {
           localStorage.setItem('motion_map_token', token);
           setUserToken(token);
         }
-        if (res.data && res.data.strava_access_token) {
-          const sToken = res.data.strava_access_token;
-          localStorage.setItem('strava_access_token', sToken);
-          setStravaAccessToken(sToken);
-        }
         setActiveSidebarTab('history');
+        fetchUserHistoryList();
       })
       .catch((err) => {
         setError(err.response?.data?.detail || "Failed to verify credentials linkage with your Strava account profile.");
@@ -115,14 +110,33 @@ function App() {
 
   // --- POPULATE LIVE STRAVA FEED CAROUSEL OPTIONS ---
   useEffect(() => {
-    if (stravaAccessToken && activeSidebarTab === 'history') {
+    if (userToken && activeSidebarTab === 'history') {
       setStravaFeedLoading(true);
-      axios.get(`${API_BASE}/api/strava/latest-activities?strava_token=${stravaAccessToken}`)
-        .then(res => setStravaFeedItems(res.data.activities || []))
-        .catch(() => console.error("Could not populate live Strava stream options."))
-        .finally(() => setStravaFeedLoading(false));
+      axios.get(`${API_BASE}/api/strava/latest-activities`, {
+        headers: { Authorization: `Bearer ${userToken}` }
+      })
+      .then(res => setStravaFeedItems(res.data.activities || []))
+      .catch(() => console.error("Could not populate live Strava stream options."))
+      .finally(() => setStravaFeedLoading(false));
     }
-  }, [stravaAccessToken, activeSidebarTab]);
+  }, [userToken, activeSidebarTab]);
+
+  // --- STREAM AND PARSE LIVE HIGH-RES STRAVA WORKOUT ---
+  const handleLoadStravaActivity = async (stravaActivityId) => {
+    if (!userToken) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await axios.get(`${API_BASE}/api/strava/analyze-activity/${stravaActivityId}`, {
+        headers: { Authorization: `Bearer ${userToken}` }
+      });
+      setData(res.data.data);
+    } catch (err) {
+      setError("Failed to download and parse high-resolution telemetry streams from Strava.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!isDraggingSplitter) return;
@@ -182,23 +196,6 @@ function App() {
     }
   };
 
-  // --- STREAM AND PARSE LIVE HIGH-RES STRAVA WORKOUT ---
-  const handleLoadStravaActivity = async (stravaActivityId) => {
-    setLoading(true);
-    setError(null);
-    try {
-      // FIX: Added the application authorization token parameter header array configuration mapping block 
-      // so the backend can verify user database records on live stream initialization passes.
-      const res = await axios.get(`${API_BASE}/api/strava/analyze-activity/${stravaActivityId}?token=${stravaAccessToken}`, {
-        headers: userToken ? { Authorization: `Bearer ${userToken}` } : {}
-      });
-      setData(res.data.data);
-    } catch (err) {
-      setError("Failed to download and parse high-resolution telemetry streams from Strava.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSaveCurrentRun = async () => {
     if (!data || !userToken) return;
@@ -547,7 +544,8 @@ function App() {
             )}
 
             {/* RESTORED CAROUSEL: LIVE STRAVA INSTANT FEED SELECTION DRAWER */}
-            {stravaAccessToken && stravaFeedItems.length > 0 && (
+            {/* UPDATED CONDITION: RENDERS THE CAROUSEL VAULT SECURELY UNDER ACTIVE SESSIONS */}
+            {userToken && stravaFeedItems.length > 0 && (
               <div className="mb-5">
                 <h3 className="text-xs font-black uppercase tracking-wider text-[#FC6100] mb-2 flex items-center">
                   <span className="mr-1.5">🧡</span> Import Recent Strava Activities
