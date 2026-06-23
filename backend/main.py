@@ -36,12 +36,11 @@ from engine import (
 
 app = FastAPI(title="Motion Map Analyzer", version="2.0")
 
-# Look for the CORS section and update it to look like this:
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
-
 # ----------------------------------------------------------------------------------
 # CONFIGURATION & CORS MIDDLEWARE INTERFACES
 # ----------------------------------------------------------------------------------
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[FRONTEND_URL, "http://localhost:5173", "http://127.0.0.1:5173"], 
@@ -81,6 +80,88 @@ class SnapshotRequest(BaseModel):
     config: dict
 
 # ----------------------------------------------------------------------------------
+# STRUCTURAL SECURITY DEPENDENCIES (MOVED UP TO RECOVER FROM NAMEERROR CRASH)
+# ----------------------------------------------------------------------------------
+async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("user_id")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid session credentials")
+        return str(user_id)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Session expired or invalid")
+
+def extract_optional_user_id(request: Request) -> str | None:
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None
+    try:
+        token = auth_header.split(" ")[1]
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
+        return str(payload.get("user_id"))
+    except Exception:
+        return None
+
+# ----------------------------------------------------------------------------------
+# BACKGROUND SECURE TOKEN AUTO-REFRESH ENGINE
+# ----------------------------------------------------------------------------------
+async def get_valid_strava_token(user_id: str) -> str:
+    """
+    Validates token timelines. Automatically updates user credentials via refresh keys
+    if the lease duration falls below a 5-minute threshold marker.
+    """
+    with get_db_cursor() as cur:
+        cur.execute(
+            "SELECT access_token, refresh_token, expires_at FROM user_strava_tokens WHERE user_id = %s;",
+            (user_id,)
+        )
+        token_row = cur.fetchone()
+        
+    if not token_row:
+        raise HTTPException(status_code=400, detail="No linked Strava profile associated with this account session.")
+        
+    access_token, refresh_token, expires_at = token_row
+    
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+        
+    if datetime.now(timezone.utc) < (expires_at - timedelta(minutes=5)):
+        return access_token
+        
+    async with httpx.AsyncClient() as client:
+        res = await client.post(
+            "https://www.strava.com/oauth/token",
+            data={
+                "client_id": STRAVA_CLIENT_ID,
+                "client_secret": STRAVA_CLIENT_SECRET,
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token
+            }
+        )
+        
+    if res.status_code != 200:
+        raise HTTPException(status_code=400, detail="Credentials lease renewal rejected by Strava's security gateway.")
+        
+    refresh_data = res.json()
+    new_access_token = refresh_data["access_token"]
+    new_refresh_token = refresh_data.get("refresh_token", refresh_token)
+    new_expiry_time = datetime.now(timezone.utc) + timedelta(seconds=refresh_data["expires_in"])
+    
+    with get_db_cursor() as cur:
+        cur.execute(
+            """
+            UPDATE user_strava_tokens 
+            SET access_token = %s, refresh_token = %s, expires_at = %s 
+            WHERE user_id = %s;
+            """,
+            (new_access_token, new_refresh_token, new_expiry_time, user_id)
+        )
+        
+    return new_access_token
+
+# ----------------------------------------------------------------------------------
 # JSON & DICTIONARY STRUCTURAL KEY ORDER RECONSTRUCTION ENGINE
 # ----------------------------------------------------------------------------------
 def reorder_dict_keys(source_dict: dict, ordered_keys: list) -> dict:
@@ -104,7 +185,6 @@ def normalize_activity_payload(payload: dict) -> dict:
     if not payload:
         return payload
 
-    # 1. Enforce strict key arrangement sequence inside summary block
     if "summary" in payload and isinstance(payload["summary"], dict):
         summary_sequence = [
             "start_time", "end_time", "total_distance_m", "elapsed_time_s",
@@ -116,11 +196,8 @@ def normalize_activity_payload(payload: dict) -> dict:
         ]
         payload["summary"] = reorder_dict_keys(payload["summary"], summary_sequence)
 
-    # 2. Enforce structural alignment inside metrics block
     if "performance" in payload and isinstance(payload["performance"], dict):
         perf = payload["performance"]
-        
-        # Enforce inner lists field-level order sequence
         rolling_key = next((k for k in perf if "rolling" in k or "best" in k), "best_rolling")
         if rolling_key in perf and isinstance(perf[rolling_key], list):
             rolling_fields = ["window_m", "pace_min_per_km", "start_time", "end_time"]
@@ -135,7 +212,6 @@ def normalize_activity_payload(payload: dict) -> dict:
                 band_fields = ["band", "min_val", "max_val", "time_s", "distance_m", "avg_pace_min_per_km", "ef"]
                 perf[zone_key] = [reorder_dict_keys(item, band_fields) for item in perf[zone_key]]
 
-        # Enforce outer metric section dictionary keys order
         perf_root_sequence = [rolling_key, "km_splits", "hr_bands", "cadence_bands", "ef_run"]
         payload["performance"] = reorder_dict_keys(perf, perf_root_sequence)
 
@@ -167,80 +243,14 @@ def reverse_geocode_city(lat, lon):
         pass
     return "Local Route"
 
-# Ensure your cloud tokens are fetched from the environment variables
 STRAVA_CLIENT_ID = os.getenv("STRAVA_CLIENT_ID")
 STRAVA_CLIENT_SECRET = os.getenv("STRAVA_CLIENT_SECRET")
 
 # ----------------------------------------------------------------------------------
-# BACKGROUND SECURE TOKEN AUTO-REFRESH ENGINE
-# ----------------------------------------------------------------------------------
-async def get_valid_strava_token(user_id: str) -> str:
-    """
-    Checks if a user's Strava access token is expired. If expired, automatically 
-    fires a refresh handshake with Strava, updates the database, and returns a valid token.
-    """
-    with get_db_cursor() as cur:
-        cur.execute(
-            "SELECT access_token, refresh_token, expires_at FROM user_strava_tokens WHERE user_id = %s;",
-            (user_id,)
-        )
-        token_row = cur.fetchone()
-        
-    if not token_row:
-        raise HTTPException(status_code=400, detail="No linked Strava profile associated with this account session.")
-        
-    access_token, refresh_token, expires_at = token_row
-    
-    # Ensure expires_at is timezone-aware for an accurate chronological comparison
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-        
-    # If the token is valid for the next 5 minutes, reuse it safely
-    if datetime.now(timezone.utc) < (expires_at - timedelta(minutes=5)):
-        return access_token
-        
-    # CORE REFRESH LIFECYCLE HANDSHAKE: Fire a token refresh query to Strava's servers
-    async with httpx.AsyncClient() as client:
-        res = await client.post(
-            "https://www.strava.com/oauth/token",
-            data={
-                "client_id": STRAVA_CLIENT_ID,
-                "client_secret": STRAVA_CLIENT_SECRET,
-                "grant_type": "refresh_token",
-                "refresh_token": refresh_token
-            }
-        )
-        
-    if res.status_code != 200:
-        raise HTTPException(status_code=400, detail="Credentials lease renewal rejected by Strava's security gateway.")
-        
-    refresh_data = res.json()
-    new_access_token = refresh_data["access_token"]
-    new_refresh_token = refresh_data.get("refresh_token", refresh_token)
-    new_expiry_time = datetime.now(timezone.utc) + timedelta(seconds=refresh_data["expires_in"])
-    
-    # Update relational tables with the updated secure access token row
-    with get_db_cursor() as cur:
-        cur.execute(
-            """
-            UPDATE user_strava_tokens 
-            SET access_token = %s, refresh_token = %s, expires_at = %s 
-            WHERE user_id = %s;
-            """,
-            (new_access_token, new_refresh_token, new_expiry_time, user_id)
-        )
-        
-    return new_access_token
-
-# ----------------------------------------------------------------------------------
-# STRAVA OAUTH EXCHANGE ROUTER
+# STRAVA OAUTH SYSTEM ENDPOINTS
 # ----------------------------------------------------------------------------------
 @app.post("/api/auth/strava/exchange")
 async def exchange_strava_code(payload: dict, request: Request):
-    """
-    Exchanges an authorization code from frontend for long-lived refresh tokens.
-    Persists credentials to deep relational state tables securely.
-    """
     code = payload.get("code")
     if not code:
         raise HTTPException(status_code=400, detail="Missing authorization code from Strava.")
@@ -268,7 +278,6 @@ async def exchange_strava_code(payload: dict, request: Request):
 
     current_user_id = extract_optional_user_id(request)
     
-    # Auto-login behavior: If the user is unauthenticated, instantiate an anonymous account record
     access_token = None
     if not current_user_id:
         import hashlib
@@ -278,18 +287,17 @@ async def exchange_strava_code(payload: dict, request: Request):
             cur.execute("SELECT id FROM users WHERE hashed_email = %s;", (blind_strava_hash,))
             user_record = cur.fetchone()
             if user_record:
-                current_user_id = user_record[0]
+                current_user_id = str(user_record[0])
             else:
                 cur.execute("INSERT INTO users (hashed_email) VALUES (%s) RETURNING id;", (blind_strava_hash,))
-                current_user_id = cur.fetchone()[0]
+                current_user_id = str(cur.fetchone()[0])
                 
         access_token = jwt.encode(
-            {"user_id": str(current_user_id), "exp": datetime.now(timezone.utc) + timedelta(days=7)}, 
+            {"user_id": current_user_id, "exp": datetime.now(timezone.utc) + timedelta(days=7)}, 
             JWT_SECRET_KEY, 
             algorithm=ALGORITHM
         )
 
-    # PERSIST TO DATABASE: Save the multi-user credentials securely into Neon tables
     expiry_time = datetime.now(timezone.utc) + timedelta(seconds=token_data["expires_in"])
     with get_db_cursor() as cur:
         cur.execute(
@@ -309,15 +317,8 @@ async def exchange_strava_code(payload: dict, request: Request):
         "athlete": athlete_data
     }
 
-# ----------------------------------------------------------------------------------
-# GET LATEST STRAVA ACTIVITIES FEED
-# ----------------------------------------------------------------------------------
 @app.get("/api/strava/latest-activities")
 async def get_latest_strava_activities(current_user_id: str = Depends(get_current_user_id)):
-    """
-    Fetches the 5 most recent activities. Leverages automatic token refreshing workers.
-    """
-    # Grab the active user's valid token directly from the database framework
     strava_token = await get_valid_strava_token(current_user_id)
     
     url = "https://www.strava.com/api/v3/athlete/activities"
@@ -345,14 +346,8 @@ async def get_latest_strava_activities(current_user_id: str = Depends(get_curren
         ]
     }
 
-# ----------------------------------------------------------------------------------
-# STRAVA TELEMETRY STREAM INGEST ENGINE (REPAIRED & TIMECODE ALIGNED)
-# ----------------------------------------------------------------------------------
 @app.get("/api/strava/analyze-activity/{activity_id}")
 async def analyze_strava_activity(activity_id: str, request: Request, current_user_id: str = Depends(get_current_user_id)):
-    """
-    Processes high-resolution stream series. Auto-manages user authorization leases.
-    """
     strava_token = await get_valid_strava_token(current_user_id)
     headers = {"Authorization": f"Bearer {strava_token}"}
     
@@ -378,8 +373,6 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     activity_type = activity_info.get("type", "Run")
     is_running_activity = activity_type == "Run"
 
-    # FIX: Enforce strict UTC baseline start_date extraction to mimic native .fit/.tcx file streams.
-    # This prevents double-timezone shifting when coordinate offsets are calculated downstream.
     start_date_str = activity_info.get("start_date")
     if start_date_str:
         base_start_time = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
@@ -458,7 +451,6 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     track_points = tp_df[cols_to_extract].to_dict(orient="records")
     runstats["location_city"] = reverse_geocode_city(temp_plot_df.iloc[0]["latitude"], temp_plot_df.iloc[0]["longitude"]) if not temp_plot_df.empty else "Local Route"
 
-    current_user_id = extract_optional_user_id(request)
     existing_id = None
     if current_user_id:
         try:
@@ -484,32 +476,7 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     return JSONResponse(content=clean_nans(raw_payload))
 
 # ----------------------------------------------------------------------------------
-# SECURITY HELPER ROUTINES
-# ----------------------------------------------------------------------------------
-async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
-    token = credentials.credentials
-    try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("user_id")
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid session credentials")
-        return user_id
-    except Exception:
-        raise HTTPException(status_code=401, detail="Session expired or invalid")
-
-def extract_optional_user_id(request: Request) -> str | None:
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        return None
-    try:
-        token = auth_header.split(" ")[1]
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
-        return payload.get("user_id")
-    except Exception:
-        return None
-
-# ----------------------------------------------------------------------------------
-# BLIND SECURITY IDENTITY CONTROLLERS (PASSWORDLESS AUTH)
+# PASSWORDLESS AUTHENTICATION ROUTERS
 # ----------------------------------------------------------------------------------
 @app.post("/api/auth/send-otp")
 async def send_otp(payload: EmailAuthRequest):
@@ -535,7 +502,7 @@ async def send_otp(payload: EmailAuthRequest):
                 "html": f"""
                     <div style='font-family:sans-serif; padding:24px; max-width:450px; border:1px solid #e2e8f0; border-radius:12px;'>
                         <h2 style='color:#2563eb; margin-top:0;'>👟 MotionMap Security</h2>
-                        <p style='color:#475569; font-size:14px;'>Use the short-lived authentication token code below to access your workout logs:</p>
+                        <p style='color:#475569; font-size:14px;'>Use the token code below to access your workout logs:</p>
                         <div style='background:#f1f5f9; padding:16px; text-align:center; border-radius:8px; font-size:32px; font-weight:900; letter-spacing:4px; color:#1e293b; margin:20px 0;'>
                             {otp_code}
                         </div>
@@ -577,14 +544,10 @@ async def verify_otp(payload: VerifyOTPRequest):
     return {"access_token": access_jwt, "token_type": "bearer"}
 
 # ----------------------------------------------------------------------------------
-# CORE RUN ANALYSIS ENGINES (STATELESS WORKSPACE PROCESSING)
+# STATELESS WORKSPACE PARSING ROUTINE
 # ----------------------------------------------------------------------------------
 @app.post("/api/analyze")
-async def analyze_run(
-    request: Request,
-    file: UploadFile = File(...), 
-    apply_privacy: bool = Form(True)
-):
+async def analyze_run(request: Request, file: UploadFile = File(...), apply_privacy: bool = Form(True)):
     try:
         contents = await file.read()
         file_obj = io.BytesIO(contents)
@@ -678,7 +641,7 @@ async def analyze_run(
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
 # ----------------------------------------------------------------------------------
-# ZERO-KNOWLEDGE RUN HISTORY LOG STORAGE CONTROLLERS (FIXED DEDUPLICATION RETURN)
+# RUN DATA HISTORY MANAGEMENT ENDPOINTS
 # ----------------------------------------------------------------------------------
 @app.post("/api/activities")
 async def save_activity(payload: SaveActivityRequest, current_user_id: str = Depends(get_current_user_id)):
@@ -694,15 +657,8 @@ async def save_activity(payload: SaveActivityRequest, current_user_id: str = Dep
         with get_db_cursor() as cur:
             cur.execute("SELECT id FROM activities WHERE user_id = %s AND original_start_time = %s;", (current_user_id, orig_start_time))
             existing_row = cur.fetchone()
-            
-            # FIX: If the workout is already present, return its actual database ID row
-            # to let the React UI toggle statefully into the green "Saved to Cloud" pill!
             if existing_row:
-                return {
-                    "status": "success", 
-                    "detail": "Activity already saved.", 
-                    "activity_id": str(existing_row[0])
-                }
+                return {"status": "success", "detail": "Activity already saved.", "activity_id": str(existing_row[0])}
 
             raw_dist = sum_data.get("moving_distance_m", 0)
             distance_km = round(float(raw_dist) / 1000.0, 2) if raw_dist else round(float(sum_data.get("distance_km", 0)), 2)
@@ -746,10 +702,6 @@ async def get_activity_history(current_user_id: str = Depends(get_current_user_i
 
 @app.get("/api/activities/{activity_id}")
 async def get_single_activity(activity_id: str, current_user_id: str = Depends(get_current_user_id)):
-    """
-    Fetches the full activity workspace package. Normalizes inner metric dictionary keys 
-    to neutralize spatial JSONB scrambling behaviors.
-    """
     try:
         with get_db_cursor() as cur:
             cur.execute("SELECT data_json FROM activities WHERE id = %s AND user_id = %s;", (activity_id, current_user_id))
@@ -776,7 +728,7 @@ async def delete_activity(activity_id: str, current_user_id: str = Depends(get_c
         raise HTTPException(status_code=500, detail=str(e))
 
 # ----------------------------------------------------------------------------------
-# HEADLESS RENDER ENGINE CONTEXTS (SERVER SIDE GRAPHICS CANVAS CAPTURE)
+# SNAPSHOT SHARE ASSET GENERATOR
 # ----------------------------------------------------------------------------------
 @app.post("/api/export-snapshot")
 async def export_snapshot(payload: SnapshotRequest):
