@@ -44,7 +44,6 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 # ----------------------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    # FIX: Explicitly include FRONTEND_URL at the beginning of the allowed origins array
     allow_origins=[FRONTEND_URL, "http://localhost:5173", "http://127.0.0.1:5173"], 
     allow_credentials=True,
     allow_methods=["*"],
@@ -270,7 +269,7 @@ async def get_latest_strava_activities(strava_token: str):
     }
 
 # ----------------------------------------------------------------------------------
-# STRAVA TELEMETRY STREAM INGEST ENGINE 
+# STRAVA TELEMETRY STREAM INGEST ENGINE (REPAIRED & STRUCTURALLY REALIGNED)
 # ----------------------------------------------------------------------------------
 @app.get("/api/strava/analyze-activity/{activity_id}")
 async def analyze_strava_activity(activity_id: str, token: str, request: Request):
@@ -299,6 +298,9 @@ async def analyze_strava_activity(activity_id: str, token: str, request: Request
         
     strava_streams = res.json()
     
+    activity_type = activity_info.get("type", "Run")
+    is_running_activity = activity_type == "Run"
+
     start_date_str = activity_info.get("start_date_local") or activity_info.get("start_date")
     if start_date_str:
         base_start_time = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
@@ -315,13 +317,18 @@ async def analyze_strava_activity(activity_id: str, token: str, request: Request
     for i in range(len(time_data)):
         point_timestamp = base_start_time + timedelta(seconds=time_data[i])
         
+        # STRATEGIC CORRECTION: Handle single foot rotation vs dual foot step spm cadence doubling 
+        raw_cadence = cad_data[i] if i < len(cad_data) else None
+        if raw_cadence is not None and is_running_activity:
+            raw_cadence = raw_cadence * 2
+
         point = {
             "time": point_timestamp.strftime("%Y-%m-%d %H:%M:%S"),
             "latitude": latlng_data[i][0] if i < len(latlng_data) else None,
             "longitude": latlng_data[i][1] if i < len(latlng_data) else None,
             "altitude_m": alt_data[i] if i < len(alt_data) else None,
             "heart_rate_bpm": hr_data[i] if i < len(hr_data) else None,
-            "cadence": cad_data[i] if i < len(cad_data) else None,
+            "cadence": raw_cadence,
         }
         transformed_rows.append(point)
         
@@ -373,7 +380,6 @@ async def analyze_strava_activity(activity_id: str, token: str, request: Request
     track_points = tp_df[cols_to_extract].to_dict(orient="records")
     runstats["location_city"] = reverse_geocode_city(temp_plot_df.iloc[0]["latitude"], temp_plot_df.iloc[0]["longitude"]) if not temp_plot_df.empty else "Local Route"
 
-    # FIX: Indentation correction applied to the database check catch statement block below
     current_user_id = extract_optional_user_id(request)
     existing_id = None
     if current_user_id:
