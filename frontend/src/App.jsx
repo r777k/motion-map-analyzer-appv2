@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from 'axios'; // Fixed module package registration string
 import { UploadCloud, Info, X, Sun, Moon, Download, Camera, LogIn, LogOut, KeyRound, Calendar, MapPin, Trash2, Search, ArrowUpDown, BarChart3, Clock, Milestone } from 'lucide-react';
 
 import RunSummary from './components/RunSummary';
@@ -74,6 +74,31 @@ function App() {
       setIsDesktopModeEnabled(true);
     }
   }, []);
+
+  // --- STRAVA API OAUTH INCOMING CALLBACK HANDLER ---
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const stravaCode = urlParams.get("code");
+    
+    if (stravaCode) {
+      setLoading(true);
+      setError(null);
+      // Clean query tokens from the address bar immediately for routing safety
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      axios.post(`${API_BASE}/api/auth/strava/exchange`, { code: stravaCode }, {
+        headers: userToken ? { Authorization: `Bearer ${userToken}` } : {}
+      })
+      .then(() => {
+        setActiveSidebarTab('history');
+        if (userToken) fetchUserHistoryList();
+      })
+      .catch((err) => {
+        setError(err.response?.data?.detail || "Failed to verify credentials linkage with your Strava account profile.");
+      })
+      .finally(() => setLoading(false));
+    }
+  }, [userToken]);
 
   useEffect(() => {
     if (!isDraggingSplitter) return;
@@ -419,7 +444,6 @@ function App() {
         
         {activeSidebarTab === 'history' && userToken ? (
           <div className={`p-6 rounded-2xl shadow-xl border w-full max-w-3xl flex flex-col h-[650px] transition-all ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-            {/* RENAMED HEADER TO WORKOUT HISTORY LOGS */}
             <h2 className="text-xl font-black tracking-tight mb-4 flex items-center justify-between">
               <span>🗂️ Workout History Logs</span>
               <button onClick={() => setActiveSidebarTab('upload')} className="text-xs text-blue-500 hover:underline font-bold">Upload a new file instead</button>
@@ -492,7 +516,6 @@ function App() {
               ) : (
                 filteredAndSortedHistory.map(item => (
                   <div key={item.id} onClick={() => handleLoadSavedActivity(item.id)} className={`p-4 rounded-xl border cursor-pointer flex items-center justify-between transition-all group ${theme === 'dark' ? 'bg-slate-950 border-slate-800 hover:border-blue-500 hover:bg-slate-900' : 'bg-slate-50 border-slate-200 hover:border-blue-500 hover:bg-white'}`}>
-                    {/* OPTION-B COMPACTED 2-LINE ACTIVITY RENDERER LAYOUT SLOT */}
                     <div className="space-y-0.5">
                       {/* Line 1: Date Time, Location */}
                       <div className="flex items-center space-x-1.5 text-sm font-black tracking-tight text-slate-800 dark:text-slate-200">
@@ -599,15 +622,32 @@ function App() {
               </form>
 
               {/* DEMO TRYOUT TRIGGER LINK */}
-              <div className="text-center mt-4 pt-1 border-t border-dashed border-slate-500/10">
-                <span className="text-xs text-slate-400">Don't have an activity file handy? </span>
-                <button 
-                  type="button" 
-                  onClick={handleDemoTryout} 
+              <div className="text-center mt-4 pt-1 border-t border-dashed border-slate-500/10 flex flex-col items-center space-y-3">
+                <div>
+                  <span className="text-xs text-slate-400">Don't have an activity file handy? </span>
+                  <button 
+                    type="button" 
+                    onClick={handleDemoTryout} 
+                    disabled={loading}
+                    className="text-xs text-blue-500 hover:text-blue-600 hover:underline font-bold bg-transparent border-none p-0 cursor-pointer disabled:opacity-30"
+                  >
+                    Try our demo run
+                  </button>
+                </div>
+
+                {/* INTEGRATED ORANGE NATIVE STRAVA CONNECTIVITY SUITE */}
+                <button
+                  type="button"
                   disabled={loading}
-                  className="text-xs text-blue-500 hover:text-blue-600 hover:underline font-bold bg-transparent border-none p-0 cursor-pointer disabled:opacity-30"
+                  onClick={() => {
+                    // Pulls client registration values from your deployment variables manifest
+                    const clientID = import.meta.env.VITE_STRAVA_CLIENT_ID || '260297';
+                    const redirectURI = encodeURIComponent("https://motion-map-analyzer-appv2.vercel.app");
+                    window.location.href = `https://www.strava.com/oauth/authorize?client_id=${clientID}&response_type=code&redirect_uri=${redirectURI}&approval_prompt=auto&scope=activity:read_all`;
+                  }}
+                  className="px-4 py-1.5 bg-[#FC6100] hover:bg-[#E25500] text-white text-[11px] font-black rounded-xl shadow-md flex items-center space-x-2 transition-all cursor-pointer disabled:opacity-30 select-none border-0"
                 >
-                  Try our demo run
+                  <span>🧡 Connect Strava Account</span>
                 </button>
               </div>
 
