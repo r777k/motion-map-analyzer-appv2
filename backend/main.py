@@ -31,7 +31,7 @@ from engine import (
     summarize_motion_segments, prepare_for_csv, infer_activity_timezone_name,
     compute_performance_stats, collapse_run_streams_for_map, build_lookup,
     enrich_segments, build_segments_payload, compute_metric_stats,
-    compute_run_stats
+    compute_run_stats, utc_to_local_string
 )
 
 app = FastAPI(title="Motion Map Analyzer", version="2.0")
@@ -447,7 +447,6 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
         run_df["speed_smooth_m_s"] = run_df["true_speed"].fillna(run_df["speed_smooth_m_s"])
         
         # Recalculate granular pace string fields directly from organic speeds
-        # FIX: Replaced OptionError pd.option_context configuration block with explicit inline replace rules
         run_df["pace_min_per_km"] = 1000.0 / (60.0 * run_df["speed_smooth_m_s"])
         run_df["pace_min_per_km"] = run_df["pace_min_per_km"].replace([float('inf'), float('-inf')], None)
         
@@ -464,7 +463,23 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     motion_segments_csv = prepare_for_csv(motion_segments_df, time_cols=["start_time", "end_time"], tz_name=tz_name)
 
     perfstats = compute_performance_stats(run_df, tz_name=tz_name)
+    
+    # ------------------------------------------------------------------------------
+    # 🎯 COUNTER-MEASURE: FIX THE ENGINE WHITELIST DROPPING COLUMNS POST-COLLAPSE
+    # ------------------------------------------------------------------------------
     run_df_collapsed = collapse_run_streams_for_map(run_df, tz_name=tz_name)
+    
+    # Extract organic values before they are deleted by engine.py's GroupBy whitelist pass
+    p_map = run_df[["time", "pace_min_per_km", "speed_smooth_m_s"]].copy()
+    p_map["time"] = utc_to_local_string(p_map["time"], tz_name=tz_name)
+    p_map = p_map.groupby("time", as_index=False).mean()
+    p_map["time"] = p_map["time"].astype(str)
+    
+    # Left-merge back onto the output map dataframes cleanly
+    run_df_collapsed["time"] = run_df_collapsed["time"].astype(str)
+    run_df_collapsed = pd.merge(run_df_collapsed, p_map, on="time", how="left")
+    # ------------------------------------------------------------------------------
+
     lookup = build_lookup(run_df_collapsed)
 
     seg_df_enriched = enrich_segments(motion_segments_csv, lookup)
