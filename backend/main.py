@@ -108,10 +108,6 @@ def extract_optional_user_id(request: Request) -> str | None:
 # BACKGROUND SECURE TOKEN AUTO-REFRESH ENGINE
 # ----------------------------------------------------------------------------------
 async def get_valid_strava_token(user_id: str) -> str:
-    """
-    Validates token timelines. Automatically updates user credentials via refresh keys
-    if the lease duration falls below a 5-minute threshold marker.
-    """
     with get_db_cursor() as cur:
         cur.execute(
             "SELECT access_token, refresh_token, expires_at FROM user_strava_tokens WHERE user_id = %s;",
@@ -342,7 +338,7 @@ async def get_latest_strava_activities(current_user_id: str = Depends(get_curren
     }
 
 # ----------------------------------------------------------------------------------
-# STRAVA TELEMETRY STREAM INGEST ENGINE (REPAIRED & TIMECODE ALIGNED)
+# STRAVA TELEMETRY STREAM INGEST ENGINE (TRUE HIGH-FIDELITY CALCULATOR TUNNEL)
 # ----------------------------------------------------------------------------------
 @app.get("/api/strava/analyze-activity/{activity_id}")
 async def analyze_strava_activity(activity_id: str, request: Request, current_user_id: str = Depends(get_current_user_id)):
@@ -358,7 +354,7 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
         
         streams_url = f"https://www.strava.com/api/v3/activities/{activity_id}/streams"
         params = {
-            "keys": "latlng,distance,altitude,time,velocity_smooth,heartrate,cadence",
+            "keys": "latlng,distance,altitude,time,heartrate,cadence",
             "key_by_type": "true"
         }
         res = await client.get(streams_url, params=params, headers=headers)
@@ -383,7 +379,6 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     alt_data = strava_streams.get("altitude", {}).get("data", [])
     hr_data = strava_streams.get("heartrate", {}).get("data", [])
     cad_data = strava_streams.get("cadence", {}).get("data", [])
-    velocity_data = strava_streams.get("velocity_smooth", {}).get("data", [])
     
     transformed_rows = []
     for i in range(len(time_data)):
@@ -413,29 +408,27 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
         raise HTTPException(status_code=400, detail="No GPS data found inside this activity track.")
         
     # ------------------------------------------------------------------------------
-    # THE RE-INJECTION TUNNEL: SAFELY MERGE LIVE STREAMS AS DATETIME OBJECTS
+    # THE RE-INJECTION TUNNEL: MERGE HARDWARE-VALIDATED CUMULATIVE DISTANCES ONLY
     # ------------------------------------------------------------------------------
     streams_map = pd.DataFrame({
         "time": [(base_start_time + timedelta(seconds=t)).strftime("%Y-%m-%d %H:%M:%S") for t in time_data]
     })
     if len(dist_data) > 0:
         streams_map["distance_m"] = pd.to_numeric(dist_data, errors="coerce")
-    if len(velocity_data) > 0:
-        streams_map["speed_m_s"] = pd.to_numeric(velocity_data, errors="coerce")
-        streams_map["speed_smooth_m_s"] = pd.to_numeric(velocity_data, errors="coerce")
 
-    # Aggregate multi-sample data points cleanly by time string
+    # Aggregate duplicate timestamps using identical rules to engine.py
     streams_map = streams_map.groupby("time", as_index=False).mean()
-
-    # FIX: Cast streams_map["time"] to datetime64 object to align with run_df type configurations
     streams_map["time"] = pd.to_datetime(streams_map["time"])
 
-    # Clear old fallback columns and execute a safe left-join merge operation
+    # Drop low-fidelity coordinate distance estimations
+    # NOTE: By omitting the pre-smoothed speed variables here, add_deltas is forced
+    # to dynamically compute raw velocity directly from the true cumulative hardware 
+    # distance stream, unlocking second-by-second micro-variations that mirror TCX.
     run_df = run_df.drop(columns=["distance_m", "speed_m_s", "speed_smooth_m_s"], errors="ignore")
     run_df = pd.merge(run_df, streams_map, on="time", how="left")
     # ------------------------------------------------------------------------------
 
-    # Compute high-fidelity delta matrices cleanly from hardware streams
+    # Re-calculate high-fidelity delta columns from the clean hardware data streams
     run_df = add_deltas(run_df)
     run_df = add_smoothed_speed(run_df)
 
@@ -499,74 +492,6 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     }
     raw_payload["data"] = normalize_activity_payload(raw_payload["data"])
     return JSONResponse(content=clean_nans(raw_payload))
-
-# ----------------------------------------------------------------------------------
-# PASSWORDLESS AUTHENTICATION ROUTERS
-# ----------------------------------------------------------------------------------
-@app.post("/api/auth/send-otp")
-async def send_otp(payload: EmailAuthRequest):
-    clear_email = payload.email.strip().lower()
-    hashed_email = blind_hash_string(clear_email)
-    
-    otp_code = str(random.randint(100000, 999999))
-    hashed_code = blind_hash_string(otp_code)
-    expiry_timestamp = datetime.now(timezone.utc) + timedelta(minutes=10)
-    
-    try:
-        with get_db_cursor() as cur:
-            cur.execute(
-                "INSERT INTO auth_codes (hashed_email, hashed_code, expires_at) VALUES (%s, %s, %s);",
-                (hashed_email, hashed_code, expiry_timestamp)
-            )
-            
-        async with httpx.AsyncClient() as client:
-            resend_payload = {
-                "from": "MotionMap <onboarding@resend.dev>",
-                "to": [clear_email],
-                "subject": "Your MotionMap Verification Code",
-                "html": f"""
-                    <div style='font-family:sans-serif; padding:24px; max-width:450px; border:1px solid #e2e8f0; border-radius:12px;'>
-                        <h2 style='color:#2563eb; margin-top:0;'>👟 MotionMap Security</h2>
-                        <p style='color:#475569; font-size:14px;'>Use the token code below to access your workout logs:</p>
-                        <div style='background:#f1f5f9; padding:16px; text-align:center; border-radius:8px; font-size:32px; font-weight:900; letter-spacing:4px; color:#1e293b; margin:20px 0;'>
-                            {otp_code}
-                        </div>
-                        <p style='color:#94a3b8; font-size:11px; margin-bottom:0;'>This security window expires automatically in 10 minutes.</p>
-                    </div>
-                """
-            }
-            response = await client.post("https://api.resend.com/emails", json=resend_payload, headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"})
-            if response.status_code >= 400:
-                raise HTTPException(status_code=502, detail="Mailing service provider rejected dispatch rules.")
-        return {"status": "success", "detail": "Verification token transmitted successfully."}
-    except Exception as e:
-        if isinstance(e, HTTPException): raise e
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/auth/verify-otp")
-async def verify_otp(payload: VerifyOTPRequest):
-    hashed_email = blind_hash_string(payload.email)
-    hashed_code = blind_hash_string(payload.code)
-    now = datetime.now(timezone.utc)
-    
-    with get_db_cursor() as cur:
-        cur.execute("SELECT id FROM auth_codes WHERE hashed_email = %s AND hashed_code = %s AND expires_at > %s ORDER BY created_at DESC LIMIT 1;", (hashed_email, hashed_code, now))
-        code_record = cur.fetchone()
-        if not code_record:
-            raise HTTPException(status_code=401, detail="Invalid or expired verification token code.")
-            
-        cur.execute("DELETE FROM auth_codes WHERE hashed_email = %s;", (hashed_email,))
-        cur.execute("SELECT id FROM users WHERE hashed_email = %s;", (hashed_email,))
-        user_record = cur.fetchone()
-        
-        if user_record:
-            user_id = user_record[0]
-        else:
-            cur.execute("INSERT INTO users (hashed_email) VALUES (%s) RETURNING id;", (hashed_email,))
-            user_id = cur.fetchone()[0]
-            
-    access_jwt = jwt.encode({"user_id": str(user_id), "exp": datetime.now(timezone.utc) + timedelta(days=7)}, JWT_SECRET_KEY, algorithm=ALGORITHM)
-    return {"access_token": access_jwt, "token_type": "bearer"}
 
 # ----------------------------------------------------------------------------------
 # STATELESS WORKSPACE PARSING ROUTINE
