@@ -80,7 +80,7 @@ class SnapshotRequest(BaseModel):
     config: dict
 
 # ----------------------------------------------------------------------------------
-# STRUCTURAL SECURITY DEPENDENCIES (SCOPED HIGH TO PREVENT NAMEERRORS)
+# STRUCTURAL SECURITY DEPENDENCIES (MOVED HIGH TO PREVENT SCOPE NAMEERRORS)
 # ----------------------------------------------------------------------------------
 async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
     token = credentials.credentials
@@ -108,10 +108,6 @@ def extract_optional_user_id(request: Request) -> str | None:
 # BACKGROUND SECURE TOKEN AUTO-REFRESH ENGINE
 # ----------------------------------------------------------------------------------
 async def get_valid_strava_token(user_id: str) -> str:
-    """
-    Validates token timelines. Automatically updates user credentials via refresh keys
-    if the lease duration falls below a 5-minute threshold marker.
-    """
     with get_db_cursor() as cur:
         cur.execute(
             "SELECT access_token, refresh_token, expires_at FROM user_strava_tokens WHERE user_id = %s;",
@@ -165,7 +161,6 @@ async def get_valid_strava_token(user_id: str) -> str:
 # JSON & DICTIONARY STRUCTURAL KEY ORDER RECONSTRUCTION ENGINE
 # ----------------------------------------------------------------------------------
 def reorder_dict_keys(source_dict: dict, ordered_keys: list) -> dict:
-    """Rebuilds a dictionary to strictly follow a predefined sequence of keys."""
     if not isinstance(source_dict, dict):
         return source_dict
     reconstructed = {}
@@ -178,10 +173,6 @@ def reorder_dict_keys(source_dict: dict, ordered_keys: list) -> dict:
     return reconstructed
 
 def normalize_activity_payload(payload: dict) -> dict:
-    """
-    Enforces a strict, predictable dictionary insertion sequence on nested fields
-    to neutralize PostgreSQL JSONB column key scrambling behaviors.
-    """
     if not payload:
         return payload
 
@@ -298,7 +289,6 @@ async def exchange_strava_code(payload: dict, request: Request):
             algorithm=ALGORITHM
         )
 
-    # RESTORED RESTRICTION: Persist credentials to the relational database for multi-user capabilities
     expiry_time = datetime.now(timezone.utc) + timedelta(seconds=token_data["expires_in"])
     with get_db_cursor() as cur:
         cur.execute(
@@ -347,6 +337,9 @@ async def get_latest_strava_activities(current_user_id: str = Depends(get_curren
         ]
     }
 
+# ----------------------------------------------------------------------------------
+# STRAVA TELEMETRY STREAM INGEST ENGINE (REPAIRED & TIMECODE ALIGNED)
+# ----------------------------------------------------------------------------------
 @app.get("/api/strava/analyze-activity/{activity_id}")
 async def analyze_strava_activity(activity_id: str, request: Request, current_user_id: str = Depends(get_current_user_id)):
     strava_token = await get_valid_strava_token(current_user_id)
@@ -410,20 +403,35 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     if raw_run_df.empty:
         raise HTTPException(status_code=400, detail="No valid tracking data found from Strava streams.")
 
+    # Process the base dataframe through the standard initial engine pipelines
     run_df = prepare_run_df(raw_run_df)
     if run_df["latitude"].isna().all() or run_df["longitude"].isna().all():
         raise HTTPException(status_code=400, detail="No GPS data found inside this activity track.")
         
-    # RESTORED RESTRICTION: Hardware Ingestion Stream Bypass Tunnel (Unlocks High-Fidelity Pace and Splits)
-    if len(dist_data) == len(run_df):
-        run_df["distance_m"] = pd.to_numeric(dist_data, errors="coerce")
+    # ------------------------------------------------------------------------------
+    # THE RE-INJECTION TUNNEL: DETECTS AND SECURELY MERGES LIVE STREAMS BY TIME
+    # ------------------------------------------------------------------------------
+    # This bypasses the length mismatch issue entirely by safely grouping on time string keys
+    streams_map = pd.DataFrame({
+        "time": [(base_start_time + timedelta(seconds=t)).strftime("%Y-%m-%d %H:%M:%S") for t in time_data]
+    })
+    if len(dist_data) > 0:
+        streams_map["distance_m"] = pd.to_numeric(dist_data, errors="coerce")
+    if len(velocity_data) > 0:
+        streams_map["speed_m_s"] = pd.to_numeric(velocity_data, errors="coerce")
+        streams_map["speed_smooth_m_s"] = pd.to_numeric(velocity_data, errors="coerce")
 
+    # Aggregate duplicate timestamps using identical rules to engine.py
+    streams_map = streams_map.groupby("time", as_index=False).mean()
+
+    # Drop low-fidelity coordinate distance-overrides and merge the true streams
+    run_df = run_df.drop(columns=["distance_m", "speed_m_s", "speed_smooth_m_s"], errors="ignore")
+    run_df = pd.merge(run_df, streams_map, on="time", how="left")
+    # ------------------------------------------------------------------------------
+
+    # Re-calculate high-fidelity delta columns from the clean hardware data streams
     run_df = add_deltas(run_df)
     run_df = add_smoothed_speed(run_df)
-
-    if len(velocity_data) == len(run_df):
-        run_df["speed_m_s"] = pd.to_numeric(velocity_data, errors="coerce")
-        run_df["speed_smooth_m_s"] = pd.to_numeric(velocity_data, errors="coerce")
 
     first_row_time = run_df["time"].min()
     orig_start_str = first_row_time.strftime("%Y-%m-%d %H:%M:%S") if pd.notna(first_row_time) else "Unknown"
@@ -487,7 +495,7 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     return JSONResponse(content=clean_nans(raw_payload))
 
 # ----------------------------------------------------------------------------------
-# RESTORED RESTRICTION: PASSWORDLESS AUTHENTICATION ROUTERS
+# PASSWORDLESS AUTHENTICATION ROUTERS
 # ----------------------------------------------------------------------------------
 @app.post("/api/auth/send-otp")
 async def send_otp(payload: EmailAuthRequest):
@@ -517,7 +525,7 @@ async def send_otp(payload: EmailAuthRequest):
                         <div style='background:#f1f5f9; padding:16px; text-align:center; border-radius:8px; font-size:32px; font-weight:900; letter-spacing:4px; color:#1e293b; margin:20px 0;'>
                             {otp_code}
                         </div>
-                        <p style='color:#94a3b8; font-size:11px; margin-bottom:0;'>This security window expires automatically in 10 minutes. If you did not request this, you can safely ignore this email.</p>
+                        <p style='color:#94a3b8; font-size:11px; margin-bottom:0;'>This security window expires automatically in 10 minutes.</p>
                     </div>
                 """
             }
