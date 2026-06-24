@@ -348,6 +348,10 @@ async def get_latest_strava_activities(current_user_id: str = Depends(get_curren
 
 @app.get("/api/strava/analyze-activity/{activity_id}")
 async def analyze_strava_activity(activity_id: str, request: Request, current_user_id: str = Depends(get_current_user_id)):
+    """
+    Fetches raw time-series metrics directly from Strava's high-resolution streams
+    and maps them into your existing internal engine models with complete type safety.
+    """
     strava_token = await get_valid_strava_token(current_user_id)
     headers = {"Authorization": f"Bearer {strava_token}"}
     
@@ -359,8 +363,9 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
         activity_info = act_res.json()
         
         streams_url = f"https://www.strava.com/api/v3/activities/{activity_id}/streams"
+        # FIX: Added "distance" to the requested keys stream array string
         params = {
-            "keys": "latlng,altitude,time,velocity_smooth,heartrate,cadence",
+            "keys": "latlng,distance,altitude,time,velocity_smooth,heartrate,cadence",
             "key_by_type": "true"
         }
         res = await client.get(streams_url, params=params, headers=headers)
@@ -381,6 +386,7 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
 
     time_data = strava_streams.get("time", {}).get("data", [])
     latlng_data = strava_streams.get("latlng", {}).get("data", [])
+    dist_data = strava_streams.get("distance", {}).get("data", []) # FIX: Extract cumulative distance stream
     alt_data = strava_streams.get("altitude", {}).get("data", [])
     hr_data = strava_streams.get("heartrate", {}).get("data", [])
     cad_data = strava_streams.get("cadence", {}).get("data", [])
@@ -397,6 +403,7 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
             "time": point_timestamp.strftime("%Y-%m-%d %H:%M:%S"),
             "latitude": latlng_data[i][0] if i < len(latlng_data) else None,
             "longitude": latlng_data[i][1] if i < len(latlng_data) else None,
+            "distance_m": dist_data[i] if i < len(dist_data) else None, # FIX: Map directly to the engine's core input variable
             "altitude_m": alt_data[i] if i < len(alt_data) else None,
             "heart_rate_bpm": hr_data[i] if i < len(hr_data) else None,
             "cadence": raw_cadence,
