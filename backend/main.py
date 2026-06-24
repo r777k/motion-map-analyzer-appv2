@@ -194,7 +194,7 @@ def normalize_activity_payload(payload: dict) -> dict:
     if "performance" in payload and isinstance(payload["performance"], dict):
         perf = payload["performance"]
         rolling_key = next((k for k in perf if "rolling" in k or "best" in k), "best_rolling")
-        if rolling_key in perf && isinstance(perf[rolling_key], list):
+        if rolling_key in perf and isinstance(perf[rolling_key], list):
             rolling_fields = ["window_m", "pace_min_per_km", "start_time", "end_time"]
             perf[rolling_key] = [reorder_dict_keys(item, rolling_fields) for item in perf[rolling_key]]
             
