@@ -431,7 +431,7 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     run_df = add_smoothed_speed(run_df)
 
     # ------------------------------------------------------------------------------
-    # FIX: RE-INJECT VELOCITY_SMOOTH AFTER THE ENGINE PASSES TO PREVENT FLAT OVERRIDES
+    # RE-INJECTION TUNNEL PASSTHROUGH (MODERNIZED PANDAS STACK FIX)
     # ------------------------------------------------------------------------------
     if len(velocity_data) > 0:
         vel_map = pd.DataFrame({
@@ -442,15 +442,15 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
         
         run_df = pd.merge(run_df, vel_map, on="time", how="left")
         
-        # Overwrite the engine's blocky calculations with Strava's organic high-res velocity curves
+        # Overwrite blocky rolling metrics with Strava's organic high-res velocity curves
         run_df["speed_m_s"] = run_df["true_speed"].fillna(run_df["speed_m_s"])
         run_df["speed_smooth_m_s"] = run_df["true_speed"].fillna(run_df["speed_smooth_m_s"])
         
         # Recalculate granular pace string fields directly from organic speeds
-        # formula: 1000m / (60s * speed)
-        with pd.option_context('mode.use_inf_as_na', True):
-            run_df["pace_min_per_km"] = 1000.0 / (60.0 * run_df["speed_smooth_m_s"])
-            
+        # FIX: Replaced OptionError pd.option_context configuration block with explicit inline replace rules
+        run_df["pace_min_per_km"] = 1000.0 / (60.0 * run_df["speed_smooth_m_s"])
+        run_df["pace_min_per_km"] = run_df["pace_min_per_km"].replace([float('inf'), float('-inf')], None)
+        
         run_df = run_df.drop(columns=["true_speed"])
     # ------------------------------------------------------------------------------
 
