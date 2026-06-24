@@ -403,7 +403,6 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     if raw_run_df.empty:
         raise HTTPException(status_code=400, detail="No valid tracking data found from Strava streams.")
 
-    # Process base structures through the engine
     run_df = prepare_run_df(raw_run_df)
     if run_df["latitude"].isna().all() or run_df["longitude"].isna().all():
         raise HTTPException(status_code=400, detail="No GPS data found inside this activity track.")
@@ -417,16 +416,13 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     if len(dist_data) > 0:
         streams_map["distance_m"] = pd.to_numeric(dist_data, errors="coerce")
 
-    # Aggregate duplicate timestamps using identical rules to engine.py
     streams_map = streams_map.groupby("time", as_index=False).mean()
     streams_map["time"] = pd.to_datetime(streams_map["time"])
 
-    # Drop low-fidelity coordinate distance estimations
     run_df = run_df.drop(columns=["distance_m", "speed_m_s", "speed_smooth_m_s"], errors="ignore")
     run_df = pd.merge(run_df, streams_map, on="time", how="left")
     # ------------------------------------------------------------------------------
 
-    # Calculate engine columns from the clean hardware data streams
     run_df = add_deltas(run_df)
     run_df = add_smoothed_speed(run_df)
 
@@ -439,11 +435,9 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
         
         run_df = pd.merge(run_df, vel_map, on="time", how="left")
         
-        # Overwrite blocky rolling metrics with Strava's organic high-res velocity curves
         run_df["speed_m_s"] = run_df["true_speed"].fillna(run_df["speed_m_s"])
         run_df["speed_smooth_m_s"] = run_df["true_speed"].fillna(run_df["speed_smooth_m_s"])
         
-        # Recalculate granular pace string fields directly from organic speeds
         run_df["pace_min_per_km"] = 1000.0 / (60.0 * run_df["speed_smooth_m_s"])
         run_df["pace_min_per_km"] = run_df["pace_min_per_km"].replace([float('inf'), float('-inf')], None)
         
@@ -460,21 +454,15 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
 
     perfstats = compute_performance_stats(run_df, tz_name=tz_name)
     
-    # ------------------------------------------------------------------------------
-    # FIX: FORCE PACE INJECTION POST-COLLAPSE
-    # ------------------------------------------------------------------------------
     run_df_collapsed = collapse_run_streams_for_map(run_df, tz_name=tz_name)
     
-    # Extract high-fidelity parameters before the engine.py GroupBy pass drops them
     p_map = run_df[["time", "pace_min_per_km", "speed_smooth_m_s"]].copy()
     p_map["time"] = utc_to_local_string(p_map["time"], tz_name=tz_name)
     p_map = p_map.groupby("time", as_index=False).mean()
     p_map["time"] = p_map["time"].astype(str)
     
-    # Left-merge back onto the output map dataframes cleanly
     run_df_collapsed["time"] = run_df_collapsed["time"].astype(str)
     run_df_collapsed = pd.merge(run_df_collapsed, p_map, on="time", how="left")
-    # ------------------------------------------------------------------------------
 
     lookup = build_lookup(run_df_collapsed)
 
@@ -489,7 +477,7 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     runstats["original_start_time"] = orig_start_str
 
     base_cols = ["time", "latitude", "longitude"]
-    # FIX: Added "distance_m" to trackpoint output array arrays to let map layers trace and map split highlights
+    # FIXED: Restored explicit "distance_m" metrics passthrough to unlock high-res map split tracing rules
     optional_cols = ["heart_rate_bpm", "cadence", "altitude_m", "pace_min_per_km", "motion_state", "distance_m"]
     
     tp_df = plot_df.copy()
@@ -528,7 +516,7 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     return JSONResponse(content=clean_nans(raw_payload))
 
 # ----------------------------------------------------------------------------------
-# STATELESS WORKSPACE PARSING ROUTINE (UPGRADED FOR SPLIT HIGHLIGHTING PARITY)
+# STATELESS WORKSPACE PARSING ROUTINE (UPGRADED CRISP NON-ARTIFICIAL SMOOTHING)
 # ----------------------------------------------------------------------------------
 @app.post("/api/analyze")
 async def analyze_run(request: Request, file: UploadFile = File(...), apply_privacy: bool = Form(True)):
@@ -553,7 +541,9 @@ async def analyze_run(request: Request, file: UploadFile = File(...), apply_priv
             raise HTTPException(status_code=400, detail="No GPS data found (Indoor run?)")
             
         run_df = add_deltas(run_df)
-        run_df = add_smoothed_speed(run_df)
+        # CRATE OPTIMIZATION PASS: Tighten the rolling window from 5.0 to 3.0 seconds to eliminate 
+        # artificial rounding effects and restore the spiky, high-fidelity organic performance textures!
+        run_df = add_smoothed_speed(run_df, window_s=3.0)
 
         first_row_time = run_df["time"].min()
         orig_start_str = first_row_time.strftime("%Y-%m-%d %H:%M:%S") if pd.notna(first_row_time) else "Unknown"
@@ -585,7 +575,7 @@ async def analyze_run(request: Request, file: UploadFile = File(...), apply_priv
         runstats["original_start_time"] = orig_start_str
 
         base_cols = ["time", "latitude", "longitude"]
-        # FIX: Added "distance_m" to the upload file trackpoints extractor too
+        # FIXED: Restored explicit "distance_m" metrics pass to trackpoint outputs here as well
         optional_cols = ["heart_rate_bpm", "cadence", "altitude_m", "pace_min_per_km", "motion_state", "distance_m"]
         
         tp_df = plot_df.copy()
