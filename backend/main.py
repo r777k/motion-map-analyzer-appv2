@@ -354,7 +354,7 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
         
         streams_url = f"https://www.strava.com/api/v3/activities/{activity_id}/streams"
         params = {
-            "keys": "latlng,distance,altitude,time,heartrate,cadence",
+            "keys": "latlng,distance,altitude,time,velocity_smooth,heartrate,cadence",
             "key_by_type": "true"
         }
         res = await client.get(streams_url, params=params, headers=headers)
@@ -379,6 +379,7 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     alt_data = strava_streams.get("altitude", {}).get("data", [])
     hr_data = strava_streams.get("heartrate", {}).get("data", [])
     cad_data = strava_streams.get("cadence", {}).get("data", [])
+    velocity_data = strava_streams.get("velocity_smooth", {}).get("data", [])
     
     transformed_rows = []
     for i in range(len(time_data)):
@@ -408,7 +409,7 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
         raise HTTPException(status_code=400, detail="No GPS data found inside this activity track.")
         
     # ------------------------------------------------------------------------------
-    # THE RE-INJECTION TUNNEL: MERGE HARDWARE-VALIDATED CUMULATIVE DISTANCES ONLY
+    # THE RE-INJECTION TUNNEL: SAFELY MERGE LIVE STREAMS AS DATETIME OBJECTS
     # ------------------------------------------------------------------------------
     streams_map = pd.DataFrame({
         "time": [(base_start_time + timedelta(seconds=t)).strftime("%Y-%m-%d %H:%M:%S") for t in time_data]
@@ -421,16 +422,37 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     streams_map["time"] = pd.to_datetime(streams_map["time"])
 
     # Drop low-fidelity coordinate distance estimations
-    # NOTE: By omitting the pre-smoothed speed variables here, add_deltas is forced
-    # to dynamically compute raw velocity directly from the true cumulative hardware 
-    # distance stream, unlocking second-by-second micro-variations that mirror TCX.
     run_df = run_df.drop(columns=["distance_m", "speed_m_s", "speed_smooth_m_s"], errors="ignore")
     run_df = pd.merge(run_df, streams_map, on="time", how="left")
     # ------------------------------------------------------------------------------
 
-    # Re-calculate high-fidelity delta columns from the clean hardware data streams
+    # Calculate engine columns from the clean hardware data streams
     run_df = add_deltas(run_df)
     run_df = add_smoothed_speed(run_df)
+
+    # ------------------------------------------------------------------------------
+    # FIX: RE-INJECT VELOCITY_SMOOTH AFTER THE ENGINE PASSES TO PREVENT FLAT OVERRIDES
+    # ------------------------------------------------------------------------------
+    if len(velocity_data) > 0:
+        vel_map = pd.DataFrame({
+            "time": [(base_start_time + timedelta(seconds=t)).strftime("%Y-%m-%d %H:%M:%S") for t in time_data],
+            "true_speed": pd.to_numeric(velocity_data, errors="coerce")
+        }).groupby("time", as_index=False).mean()
+        vel_map["time"] = pd.to_datetime(vel_map["time"])
+        
+        run_df = pd.merge(run_df, vel_map, on="time", how="left")
+        
+        # Overwrite the engine's blocky calculations with Strava's organic high-res velocity curves
+        run_df["speed_m_s"] = run_df["true_speed"].fillna(run_df["speed_m_s"])
+        run_df["speed_smooth_m_s"] = run_df["true_speed"].fillna(run_df["speed_smooth_m_s"])
+        
+        # Recalculate granular pace string fields directly from organic speeds
+        # formula: 1000m / (60s * speed)
+        with pd.option_context('mode.use_inf_as_na', True):
+            run_df["pace_min_per_km"] = 1000.0 / (60.0 * run_df["speed_smooth_m_s"])
+            
+        run_df = run_df.drop(columns=["true_speed"])
+    # ------------------------------------------------------------------------------
 
     first_row_time = run_df["time"].min()
     orig_start_str = first_row_time.strftime("%Y-%m-%d %H:%M:%S") if pd.notna(first_row_time) else "Unknown"
