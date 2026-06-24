@@ -80,7 +80,7 @@ class SnapshotRequest(BaseModel):
     config: dict
 
 # ----------------------------------------------------------------------------------
-# STRUCTURAL SECURITY DEPENDENCIES (MOVED UP TO RECOVER FROM NAMEERROR CRASH)
+# STRUCTURAL SECURITY DEPENDENCIES (SCOPED HIGH TO PREVENT NAMEERRORS)
 # ----------------------------------------------------------------------------------
 async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
     token = credentials.credentials
@@ -298,6 +298,7 @@ async def exchange_strava_code(payload: dict, request: Request):
             algorithm=ALGORITHM
         )
 
+    # RESTORED RESTRICTION: Persist credentials to the relational database for multi-user capabilities
     expiry_time = datetime.now(timezone.utc) + timedelta(seconds=token_data["expires_in"])
     with get_db_cursor() as cur:
         cur.execute(
@@ -348,10 +349,6 @@ async def get_latest_strava_activities(current_user_id: str = Depends(get_curren
 
 @app.get("/api/strava/analyze-activity/{activity_id}")
 async def analyze_strava_activity(activity_id: str, request: Request, current_user_id: str = Depends(get_current_user_id)):
-    """
-    Fetches raw time-series metrics directly from Strava's high-resolution streams
-    and maps them into your existing internal engine models with complete type safety.
-    """
     strava_token = await get_valid_strava_token(current_user_id)
     headers = {"Authorization": f"Bearer {strava_token}"}
     
@@ -363,7 +360,6 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
         activity_info = act_res.json()
         
         streams_url = f"https://www.strava.com/api/v3/activities/{activity_id}/streams"
-        # FIX: Added "distance" to the requested keys stream array string
         params = {
             "keys": "latlng,distance,altitude,time,velocity_smooth,heartrate,cadence",
             "key_by_type": "true"
@@ -386,10 +382,11 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
 
     time_data = strava_streams.get("time", {}).get("data", [])
     latlng_data = strava_streams.get("latlng", {}).get("data", [])
-    dist_data = strava_streams.get("distance", {}).get("data", []) # FIX: Extract cumulative distance stream
+    dist_data = strava_streams.get("distance", {}).get("data", [])
     alt_data = strava_streams.get("altitude", {}).get("data", [])
     hr_data = strava_streams.get("heartrate", {}).get("data", [])
     cad_data = strava_streams.get("cadence", {}).get("data", [])
+    velocity_data = strava_streams.get("velocity_smooth", {}).get("data", [])
     
     transformed_rows = []
     for i in range(len(time_data)):
@@ -403,7 +400,6 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
             "time": point_timestamp.strftime("%Y-%m-%d %H:%M:%S"),
             "latitude": latlng_data[i][0] if i < len(latlng_data) else None,
             "longitude": latlng_data[i][1] if i < len(latlng_data) else None,
-            "distance_m": dist_data[i] if i < len(dist_data) else None, # FIX: Map directly to the engine's core input variable
             "altitude_m": alt_data[i] if i < len(alt_data) else None,
             "heart_rate_bpm": hr_data[i] if i < len(hr_data) else None,
             "cadence": raw_cadence,
@@ -418,8 +414,16 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     if run_df["latitude"].isna().all() or run_df["longitude"].isna().all():
         raise HTTPException(status_code=400, detail="No GPS data found inside this activity track.")
         
+    # RESTORED RESTRICTION: Hardware Ingestion Stream Bypass Tunnel (Unlocks High-Fidelity Pace and Splits)
+    if len(dist_data) == len(run_df):
+        run_df["distance_m"] = pd.to_numeric(dist_data, errors="coerce")
+
     run_df = add_deltas(run_df)
     run_df = add_smoothed_speed(run_df)
+
+    if len(velocity_data) == len(run_df):
+        run_df["speed_m_s"] = pd.to_numeric(velocity_data, errors="coerce")
+        run_df["speed_smooth_m_s"] = pd.to_numeric(velocity_data, errors="coerce")
 
     first_row_time = run_df["time"].min()
     orig_start_str = first_row_time.strftime("%Y-%m-%d %H:%M:%S") if pd.notna(first_row_time) else "Unknown"
@@ -483,7 +487,7 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     return JSONResponse(content=clean_nans(raw_payload))
 
 # ----------------------------------------------------------------------------------
-# PASSWORDLESS AUTHENTICATION ROUTERS
+# RESTORED RESTRICTION: PASSWORDLESS AUTHENTICATION ROUTERS
 # ----------------------------------------------------------------------------------
 @app.post("/api/auth/send-otp")
 async def send_otp(payload: EmailAuthRequest):
@@ -671,7 +675,7 @@ async def save_activity(payload: SaveActivityRequest, current_user_id: str = Dep
             distance_km = round(float(raw_dist) / 1000.0, 2) if raw_dist else round(float(sum_data.get("distance_km", 0)), 2)
             duration_s = int(sum_data.get("moving_time_s", sum_data.get("duration_s", 0)))
             
-            avg_pace = sum_data.get("avg_pace_str") or sum_data.get("avg_pace") or sum_data.get("avg pace min per km") or sum_data.get("avg_pace_min_per_km") or "-:--"
+            avg_pace = sum_data.get("avg_pace_str") or sum_data.get("avg_pace") or sum_data.get("avg_pace_min_per_km") or "-:--"
             if avg_pace and not ":" in str(avg_pace):
                 try:
                     dec_mins = float(avg_pace)
