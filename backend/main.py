@@ -80,7 +80,7 @@ class SnapshotRequest(BaseModel):
     config: dict
 
 # ----------------------------------------------------------------------------------
-# STRUCTURAL SECURITY DEPENDENCIES (MOVED HIGH TO PREVENT SCOPE NAMEERRORS)
+# STRUCTURAL SECURITY DEPENDENCIES (SCOPED HIGH TO PREVENT SCOPE NAMEERRORS)
 # ----------------------------------------------------------------------------------
 async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Security(security)) -> str:
     token = credentials.credentials
@@ -108,6 +108,10 @@ def extract_optional_user_id(request: Request) -> str | None:
 # BACKGROUND SECURE TOKEN AUTO-REFRESH ENGINE
 # ----------------------------------------------------------------------------------
 async def get_valid_strava_token(user_id: str) -> str:
+    """
+    Validates token timelines. Automatically updates user credentials via refresh keys
+    if the lease duration falls below a 5-minute threshold marker.
+    """
     with get_db_cursor() as cur:
         cur.execute(
             "SELECT access_token, refresh_token, expires_at FROM user_strava_tokens WHERE user_id = %s;",
@@ -190,7 +194,7 @@ def normalize_activity_payload(payload: dict) -> dict:
     if "performance" in payload and isinstance(payload["performance"], dict):
         perf = payload["performance"]
         rolling_key = next((k for k in perf if "rolling" in k or "best" in k), "best_rolling")
-        if rolling_key in perf and isinstance(perf[rolling_key], list):
+        if rolling_key in perf && isinstance(perf[rolling_key], list):
             rolling_fields = ["window_m", "pace_min_per_km", "start_time", "end_time"]
             perf[rolling_key] = [reorder_dict_keys(item, rolling_fields) for item in perf[rolling_key]]
             
@@ -403,15 +407,14 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     if raw_run_df.empty:
         raise HTTPException(status_code=400, detail="No valid tracking data found from Strava streams.")
 
-    # Process the base dataframe through the standard initial engine pipelines
+    # Process base structures through the engine
     run_df = prepare_run_df(raw_run_df)
     if run_df["latitude"].isna().all() or run_df["longitude"].isna().all():
         raise HTTPException(status_code=400, detail="No GPS data found inside this activity track.")
         
     # ------------------------------------------------------------------------------
-    # THE RE-INJECTION TUNNEL: DETECTS AND SECURELY MERGES LIVE STREAMS BY TIME
+    # THE RE-INJECTION TUNNEL: SAFELY MERGE LIVE STREAMS AS DATETIME OBJECTS
     # ------------------------------------------------------------------------------
-    # This bypasses the length mismatch issue entirely by safely grouping on time string keys
     streams_map = pd.DataFrame({
         "time": [(base_start_time + timedelta(seconds=t)).strftime("%Y-%m-%d %H:%M:%S") for t in time_data]
     })
@@ -421,15 +424,18 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
         streams_map["speed_m_s"] = pd.to_numeric(velocity_data, errors="coerce")
         streams_map["speed_smooth_m_s"] = pd.to_numeric(velocity_data, errors="coerce")
 
-    # Aggregate duplicate timestamps using identical rules to engine.py
+    # Aggregate multi-sample data points cleanly by time string
     streams_map = streams_map.groupby("time", as_index=False).mean()
 
-    # Drop low-fidelity coordinate distance-overrides and merge the true streams
+    # FIX: Cast streams_map["time"] to datetime64 object to align with run_df type configurations
+    streams_map["time"] = pd.to_datetime(streams_map["time"])
+
+    # Clear old fallback columns and execute a safe left-join merge operation
     run_df = run_df.drop(columns=["distance_m", "speed_m_s", "speed_smooth_m_s"], errors="ignore")
     run_df = pd.merge(run_df, streams_map, on="time", how="left")
     # ------------------------------------------------------------------------------
 
-    # Re-calculate high-fidelity delta columns from the clean hardware data streams
+    # Compute high-fidelity delta matrices cleanly from hardware streams
     run_df = add_deltas(run_df)
     run_df = add_smoothed_speed(run_df)
 
