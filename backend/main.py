@@ -430,9 +430,6 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     run_df = add_deltas(run_df)
     run_df = add_smoothed_speed(run_df)
 
-    # ------------------------------------------------------------------------------
-    # RE-INJECTION TUNNEL PASSTHROUGH (MODERNIZED PANDAS STACK FIX)
-    # ------------------------------------------------------------------------------
     if len(velocity_data) > 0:
         vel_map = pd.DataFrame({
             "time": [(base_start_time + timedelta(seconds=t)).strftime("%Y-%m-%d %H:%M:%S") for t in time_data],
@@ -451,7 +448,6 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
         run_df["pace_min_per_km"] = run_df["pace_min_per_km"].replace([float('inf'), float('-inf')], None)
         
         run_df = run_df.drop(columns=["true_speed"])
-    # ------------------------------------------------------------------------------
 
     first_row_time = run_df["time"].min()
     orig_start_str = first_row_time.strftime("%Y-%m-%d %H:%M:%S") if pd.notna(first_row_time) else "Unknown"
@@ -465,11 +461,11 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     perfstats = compute_performance_stats(run_df, tz_name=tz_name)
     
     # ------------------------------------------------------------------------------
-    # 🎯 COUNTER-MEASURE: FIX THE ENGINE WHITELIST DROPPING COLUMNS POST-COLLAPSE
+    # FIX: FORCE PACE INJECTION POST-COLLAPSE
     # ------------------------------------------------------------------------------
     run_df_collapsed = collapse_run_streams_for_map(run_df, tz_name=tz_name)
     
-    # Extract organic values before they are deleted by engine.py's GroupBy whitelist pass
+    # Extract high-fidelity parameters before the engine.py GroupBy pass drops them
     p_map = run_df[["time", "pace_min_per_km", "speed_smooth_m_s"]].copy()
     p_map["time"] = utc_to_local_string(p_map["time"], tz_name=tz_name)
     p_map = p_map.groupby("time", as_index=False).mean()
@@ -493,7 +489,8 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     runstats["original_start_time"] = orig_start_str
 
     base_cols = ["time", "latitude", "longitude"]
-    optional_cols = ["heart_rate_bpm", "cadence", "altitude_m", "pace_min_per_km", "motion_state"]
+    # FIX: Added "distance_m" to trackpoint output array arrays to let map layers trace and map split highlights
+    optional_cols = ["heart_rate_bpm", "cadence", "altitude_m", "pace_min_per_km", "motion_state", "distance_m"]
     
     tp_df = plot_df.copy()
     cols_to_extract = [col for col in base_cols if col in tp_df.columns]
@@ -531,7 +528,7 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     return JSONResponse(content=clean_nans(raw_payload))
 
 # ----------------------------------------------------------------------------------
-# STATELESS WORKSPACE PARSING ROUTINE
+# STATELESS WORKSPACE PARSING ROUTINE (UPGRADED FOR SPLIT HIGHLIGHTING PARITY)
 # ----------------------------------------------------------------------------------
 @app.post("/api/analyze")
 async def analyze_run(request: Request, file: UploadFile = File(...), apply_privacy: bool = Form(True)):
@@ -588,7 +585,8 @@ async def analyze_run(request: Request, file: UploadFile = File(...), apply_priv
         runstats["original_start_time"] = orig_start_str
 
         base_cols = ["time", "latitude", "longitude"]
-        optional_cols = ["heart_rate_bpm", "cadence", "altitude_m", "pace_min_per_km", "motion_state"]
+        # FIX: Added "distance_m" to the upload file trackpoints extractor too
+        optional_cols = ["heart_rate_bpm", "cadence", "altitude_m", "pace_min_per_km", "motion_state", "distance_m"]
         
         tp_df = plot_df.copy()
         cols_to_extract = [col for col in base_cols if col in tp_df.columns]
