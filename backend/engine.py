@@ -313,7 +313,13 @@ def add_deltas(df: pd.DataFrame) -> pd.DataFrame:
 def add_smoothed_speed(df: pd.DataFrame, window_s: float = 5.0) -> pd.DataFrame:
     df = df.copy()
     if "distance_m" not in df.columns:
+        if "speed_m_s" in df.columns:
+            df["speed_smooth_m_s"] = pd.to_numeric(df["speed_m_s"], errors="coerce").fillna(0.0)
+        else:
+            df["speed_smooth_m_s"] = 0.0
         return df
+
+    safe_window_s = max(1.0, float(window_s))
 
     df_ts = df[["time", "distance_m"]].dropna(subset=["time", "distance_m"]).copy()
     df_ts["time"] = pd.to_datetime(df_ts["time"], errors="coerce")
@@ -327,7 +333,8 @@ def add_smoothed_speed(df: pd.DataFrame, window_s: float = 5.0) -> pd.DataFrame:
             df["speed_smooth_m_s"] = 0.0
         return df
 
-    dist_roll = df_ts["distance_m"].rolling(f"{int(window_s)}s", min_periods=2).apply(
+    rolling_window = f"{safe_window_s:.3f}s"
+    dist_roll = df_ts["distance_m"].rolling(rolling_window, min_periods=2).apply(
         lambda x: x.iloc[-1] - x.iloc[0],
         raw=False,
     )
@@ -338,7 +345,7 @@ def add_smoothed_speed(df: pd.DataFrame, window_s: float = 5.0) -> pd.DataFrame:
     if "dist_rolling" not in df.columns:
         df["dist_rolling"] = np.nan
 
-    df["speed_smooth_m_s"] = df["dist_rolling"] / window_s
+    df["speed_smooth_m_s"] = pd.to_numeric(df["dist_rolling"], errors="coerce") / safe_window_s
 
     if "speed_m_s" in df.columns:
         df["speed_smooth_m_s"] = df["speed_smooth_m_s"].fillna(
@@ -348,6 +355,7 @@ def add_smoothed_speed(df: pd.DataFrame, window_s: float = 5.0) -> pd.DataFrame:
         df["speed_smooth_m_s"] = df["speed_smooth_m_s"].fillna(0.0)
 
     return df
+
 
 class SegmentStatsCalculator:
     """Pre-computes numpy arrays and cumulative sums to make segment slice math O(1)."""
@@ -999,13 +1007,27 @@ def basic_time_distance(df: pd.DataFrame):
         "moving_distance_m": moving_distance_m,
     }
 
-def compute_ascent_descent(df: pd.DataFrame):
+def compute_ascent_descent(
+    df: pd.DataFrame,
+    delta_threshold_m: float = 1.5,
+    trust_source_altitude: bool = False,
+) -> tuple[float, float]:
     if "altitude_m" not in df.columns:
         return np.nan, np.nan
-    alt = pd.to_numeric(df["altitude_m"], errors="coerce")
+
+    alt = pd.to_numeric(df["altitude_m"], errors="coerce").dropna()
+    if alt.empty or len(alt) < 2:
+        return np.nan, np.nan
+
     delta = alt.diff().fillna(0.0)
-    ascent = float(delta.clip(lower=0).sum())
-    descent = float((-delta.clip(upper=0)).sum())
+
+    if trust_source_altitude:
+        filtered_delta = delta
+    else:
+        filtered_delta = delta.where(delta.abs() >= float(delta_threshold_m), 0.0)
+
+    ascent = float(filtered_delta.clip(lower=0).sum())
+    descent = float((-filtered_delta.clip(upper=0)).sum())
     return ascent, descent
 
 def summarize_motion_totals(seg_df: pd.DataFrame):
@@ -1112,7 +1134,13 @@ def build_run_summary_title(runstats: dict, plot_df: pd.DataFrame) -> str:
 
     return f"Run Summary — {title_date} — {location_text}"
 
-def compute_run_stats(df: pd.DataFrame, segdf: pd.DataFrame, tz_name=DEFAULT_TIMEZONE):
+def compute_run_stats(
+    df: pd.DataFrame,
+    seg_df: pd.DataFrame,
+    tz_name=DEFAULT_TIMEZONE,
+    ascent_descent_threshold_m: float = 1.5,
+    trust_source_altitude: bool = False,
+):
     ti = basic_time_distance(df)
 
     moving_speed = np.nan
@@ -1124,7 +1152,7 @@ def compute_run_stats(df: pd.DataFrame, segdf: pd.DataFrame, tz_name=DEFAULT_TIM
         and ti["moving_distance_m"] > 0
     ):
         moving_speed = ti["moving_distance_m"] / ti["moving_time_s"]
-        moving_pace = ti["moving_time_s"] / 60.0 / (ti["moving_distance_m"] / 1000.0)
+        moving_pace = (ti["moving_time_s"] / 60.0) / (ti["moving_distance_m"] / 1000.0)
 
     max_speed = np.nan
     max_pace = np.nan
@@ -1133,7 +1161,7 @@ def compute_run_stats(df: pd.DataFrame, segdf: pd.DataFrame, tz_name=DEFAULT_TIM
         speed = speed[speed > 0]
         if not speed.empty:
             max_speed = float(speed.max())
-            max_pace = 1000.0 / max_speed / 60.0
+            max_pace = 1000.0 / (max_speed * 60.0)
 
     avg_hr = np.nan
     max_hr = np.nan
@@ -1151,8 +1179,13 @@ def compute_run_stats(df: pd.DataFrame, segdf: pd.DataFrame, tz_name=DEFAULT_TIM
             avg_cad = float(cad.mean())
             max_cad = float(cad.max())
 
-    ascent, descent = compute_ascent_descent(df)
-    motion_totals = summarize_motion_totals(segdf)
+    ascent, descent = compute_ascent_descent(
+        df,
+        delta_threshold_m=ascent_descent_threshold_m,
+        trust_source_altitude=trust_source_altitude,
+    )
+
+    motion_totals = summarize_motion_totals(seg_df)
 
     start_time = df["time"].iloc[0] if not df.empty else None
     end_time = df["time"].iloc[-1] if not df.empty else None
@@ -1175,7 +1208,7 @@ def compute_run_stats(df: pd.DataFrame, segdf: pd.DataFrame, tz_name=DEFAULT_TIM
         "ascent_m": ascent,
         "descent_m": descent,
         "motion_totals": motion_totals,
-        "segment_count": int(len(segdf)),
+        "segment_count": int(len(seg_df)),
         "trackpoint_count": int(len(df)),
         "timezone_name": tz_name,
     }
