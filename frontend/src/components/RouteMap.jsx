@@ -144,16 +144,17 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
     return THICKNESS_MODES[currentMode];
   }, [config.thickness]);
 
+  // UPGRADED: Added 'distance_m' to forward-fill rules to enable granular geometric split tracking
   const enrichedTrackpoints = useMemo(() => {
     if (!trackpoints) return [];
-    let lastKnown = { 'pace_min_per_km': null, 'heart_rate_bpm': null, 'cadence': null, 'altitude_m': null };
+    let lastKnown = { 'pace_min_per_km': null, 'heart_rate_bpm': null, 'cadence': null, 'altitude_m': null, 'distance_m': null };
 
     return trackpoints.map(tp => {
       const parentSeg = segments.find(seg => tp.time >= seg.start_time && tp.time <= seg.end_time);
       const stateKey = parentSeg ? parentSeg.label.charAt(0).toUpperCase() + parentSeg.label.slice(1).toLowerCase() : "Running";
       const enrichedTp = { ...tp, _motionState: stateKey };
 
-      ['pace_min_per_km', 'heart_rate_bpm', 'cadence', 'altitude_m'].forEach(key => {
+      ['pace_min_per_km', 'heart_rate_bpm', 'cadence', 'altitude_m', 'distance_m'].forEach(key => {
         let val = tp[key];
         if (key === 'pace_min_per_km' && (val == null || isNaN(val))) val = parentSeg ? parentSeg.avg_pace_min_per_km : null;
         if (val != null && isFinite(val) && !isNaN(val)) lastKnown[key] = val;
@@ -257,6 +258,16 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
           }
         } else if (activeHighlight.type === 'time') {
           isPointSelected = p1.time >= activeHighlight.start && p1.time <= activeHighlight.end;
+        } else if (activeHighlight.type === 'split') {
+          // UPGRADED: Intercepts active kilometer highlights and scales weights point-by-point
+          const targetSplit = splits?.find(s => s.index === activeHighlight.index);
+          if (targetSplit) {
+            isPointSelected = p1.time >= targetSplit.start_time && p1.time <= targetSplit.end_time;
+          } else {
+            const startDist = (activeHighlight.index - 1) * 1000;
+            const endDist = activeHighlight.index * 1000;
+            isPointSelected = p1._distance_m >= startDist && p1._distance_m <= endDist;
+          }
         }
       }
 
@@ -276,7 +287,6 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
       lines.push(
         <Polyline key={i} positions={[[p1.latitude, p1.longitude], [p2.latitude, p2.longitude]]} 
           eventHandlers={polylineHandlers}
-          // --- ADDED: Explicit class targets protecting metric track vector paths ---
           className="custom-leaflet-track-vector"
           pathOptions={{ 
             color: interpolator(colorVal), 
@@ -292,7 +302,7 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
       );
     }
     return lines;
-  }, [enrichedTrackpoints, config.overlayMetric, config.colorScale, config.motionTypes, activeHighlight, currentZoom, modeConfig, segments, setActiveHighlight]);
+  }, [enrichedTrackpoints, config.overlayMetric, config.colorScale, config.motionTypes, activeHighlight, currentZoom, modeConfig, segments, splits, setActiveHighlight]);
 
   const mapMarkers = useMemo(() => {
     if (!trackpoints || trackpoints.length === 0) return [];
@@ -370,8 +380,17 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
         {config.overlayMetric === 'None' && (!activeHighlight || activeHighlight.type !== 'metric') && 
           segments.filter(seg => config.motionTypes[seg.label.charAt(0).toUpperCase() + seg.label.slice(1).toLowerCase()]).map((seg, index) => {
             let isHighlighted = true;
-            if (activeHighlight?.type === 'time') {
-              isHighlighted = seg.start_time >= activeHighlight.start && seg.end_time <= activeHighlight.end;
+            
+            if (activeHighlight) {
+              if (activeHighlight.type === 'time') {
+                isHighlighted = seg.start_time >= activeHighlight.start && seg.end_time <= activeHighlight.end;
+              } else if (activeHighlight.type === 'split') {
+                // UPGRADED: Evaluates segment bounds against active kilometer split intervals
+                const targetSplit = splits?.find(s => s.index === activeHighlight.index);
+                if (targetSplit) {
+                  isHighlighted = seg.start_time <= targetSplit.end_time && seg.end_time >= targetSplit.start_time;
+                }
+              }
             }
 
             const polylineHandlers = {
@@ -387,7 +406,6 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
             return (
               <Polyline key={index} positions={seg.coords} 
                 eventHandlers={polylineHandlers}
-                // --- ADDED: Explicit class target flags protecting standard polyline intervals ---
                 className="custom-leaflet-track-vector"
                 pathOptions={{ 
                   color: seg.color || '#3b82f6', 
