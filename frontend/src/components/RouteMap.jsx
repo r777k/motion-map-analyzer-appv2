@@ -91,28 +91,6 @@ const formatPace = (decimalMins) => {
   return `${m}:${s.toString().padStart(2, '0')} /km`;
 };
 
-const isTrackpointInHighlight = (tp, activeHighlight) => {
-  if (!tp || !activeHighlight) return false;
-
-  if (activeHighlight.type === 'distance') {
-    const distance = Number(tp.distance_m);
-    if (!Number.isFinite(distance)) return false;
-    return distance >= activeHighlight.startDistance && distance <= activeHighlight.endDistance;
-  }
-
-  if (activeHighlight.type === 'time') {
-    return tp.time >= activeHighlight.start && tp.time <= activeHighlight.end;
-  }
-
-  if (activeHighlight.type === 'metric') {
-    const value = Number(tp[activeHighlight.metricKey]);
-    if (!Number.isFinite(value)) return false;
-    return value >= activeHighlight.min && value < activeHighlight.max;
-  }
-
-  return false;
-};
-
 function FitBounds({ coords }) {
   const map = useMap();
   useEffect(() => {
@@ -173,11 +151,7 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
     return trackpoints.map(tp => {
       const parentSeg = segments.find(seg => tp.time >= seg.start_time && tp.time <= seg.end_time);
       const stateKey = parentSeg ? parentSeg.label.charAt(0).toUpperCase() + parentSeg.label.slice(1).toLowerCase() : "Running";
-      const enrichedTp = {
-        ...tp,
-        distance_m: Number.isFinite(Number(tp.distance_m)) ? Number(tp.distance_m) : null,
-        _motionState: stateKey
-      };
+      const enrichedTp = { ...tp, _motionState: stateKey };
 
       ['pace_min_per_km', 'heart_rate_bpm', 'cadence', 'altitude_m'].forEach(key => {
         let val = tp[key];
@@ -188,58 +162,6 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
       return enrichedTp;
     });
   }, [trackpoints, segments]);
-
-  const highlightedTrackpoints = useMemo(() => {
-    if (!activeHighlight || !enrichedTrackpoints.length) return [];
-    return enrichedTrackpoints.filter((tp) => isTrackpointInHighlight(tp, activeHighlight));
-  }, [enrichedTrackpoints, activeHighlight]);
-
-  const highlightedCoords = useMemo(() => {
-    return highlightedTrackpoints
-      .filter((tp) => Number.isFinite(tp.latitude) && Number.isFinite(tp.longitude))
-      .map((tp) => [tp.latitude, tp.longitude]);
-  }, [highlightedTrackpoints]);
-
-  const isSegmentActive = (seg) => {
-    if (!activeHighlight) return false;
-
-    if (activeHighlight.type === 'time') {
-      return !(seg.end_time < activeHighlight.start || seg.start_time > activeHighlight.end);
-    }
-
-    if (activeHighlight.type === 'distance') {
-      const segPoints = enrichedTrackpoints.filter(
-        (tp) =>
-          tp.time >= seg.start_time &&
-          tp.time <= seg.end_time &&
-          Number.isFinite(tp.distance_m)
-      );
-
-      if (!segPoints.length) return false;
-
-      const segStartDist = segPoints[0].distance_m;
-      const segEndDist = segPoints[segPoints.length - 1].distance_m;
-
-      return !(segEndDist < activeHighlight.startDistance || segStartDist > activeHighlight.endDistance);
-    }
-
-    if (activeHighlight.type === 'metric') {
-      const metricKey = activeHighlight.metricKey;
-      const segPoints = enrichedTrackpoints.filter(
-        (tp) =>
-          tp.time >= seg.start_time &&
-          tp.time <= seg.end_time &&
-          Number.isFinite(Number(tp[metricKey]))
-      );
-
-      return segPoints.some((tp) => {
-        const value = Number(tp[metricKey]);
-        return value >= activeHighlight.min && value < activeHighlight.max;
-      });
-    }
-
-    return false;
-  };
 
   const renderSegmentTooltip = (seg, idx) => {
     const stateLabel = seg.label.charAt(0).toUpperCase() + seg.label.slice(1).toLowerCase();
@@ -447,7 +369,11 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
         
         {config.overlayMetric === 'None' && (!activeHighlight || activeHighlight.type !== 'metric') && 
           segments.filter(seg => config.motionTypes[seg.label.charAt(0).toUpperCase() + seg.label.slice(1).toLowerCase()]).map((seg, index) => {
-            const isHighlighted = isSegmentActive(seg);
+            let isHighlighted = true;
+            if (activeHighlight?.type === 'time') {
+              isHighlighted = seg.start_time >= activeHighlight.start && seg.end_time <= activeHighlight.end;
+            }
+
             const polylineHandlers = {
               click: () => {
                 if (setActiveHighlight) {
@@ -476,17 +402,6 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
               </Polyline>
             );
         })}
-
-          {highlightedCoords.length >= 2 && (
-            <Polyline
-              positions={highlightedCoords}
-              pathOptions={{
-                color: '#f59e0b',
-                weight: getZoomWeight(modeConfig.weights.overlayActive + 1.5, currentZoom),
-                opacity: 0.95
-              }}
-            />
-          )}
 
         {((config.overlayMetric !== 'None') || (activeHighlight?.type === 'metric')) && overlayPolylines}
 
