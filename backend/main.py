@@ -344,32 +344,32 @@ async def get_latest_strava_activities(current_user_id: str = Depends(get_curren
 async def analyze_strava_activity(activity_id: str, request: Request, current_user_id: str = Depends(get_current_user_id)):
     strava_token = await get_valid_strava_token(current_user_id)
     headers = {"Authorization": f"Bearer {strava_token}"}
-
+    
     activity_url = f"https://www.strava.com/api/v3/activities/{activity_id}"
     async with httpx.AsyncClient() as client:
         act_res = await client.get(activity_url, headers=headers)
         if act_res.status_code != 200:
             raise HTTPException(status_code=400, detail="Failed to retrieve activity meta-details from Strava.")
         activity_info = act_res.json()
-
+        
         streams_url = f"https://www.strava.com/api/v3/activities/{activity_id}/streams"
         params = {
             "keys": "latlng,distance,altitude,time,velocity_smooth,heartrate,cadence",
             "key_by_type": "true"
         }
         res = await client.get(streams_url, params=params, headers=headers)
-
+        
     if res.status_code != 200:
         raise HTTPException(status_code=400, detail="Failed to retrieve tracking telemetry streams from Strava.")
-
+        
     strava_streams = res.json()
-
+    
     activity_type = activity_info.get("type", "Run")
     is_running_activity = activity_type == "Run"
 
     start_date_str = activity_info.get("start_date")
     if start_date_str:
-        base_start_time = datetime.fromisoformat(start_date_str.replace("Z", "+00:00"))
+        base_start_time = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
     else:
         base_start_time = datetime.now(timezone.utc)
 
@@ -380,11 +380,11 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     hr_data = strava_streams.get("heartrate", {}).get("data", [])
     cad_data = strava_streams.get("cadence", {}).get("data", [])
     velocity_data = strava_streams.get("velocity_smooth", {}).get("data", [])
-
+    
     transformed_rows = []
     for i in range(len(time_data)):
         point_timestamp = base_start_time + timedelta(seconds=time_data[i])
-
+        
         raw_cadence = cad_data[i] if i < len(cad_data) else None
         if raw_cadence is not None and is_running_activity:
             raw_cadence = raw_cadence * 2
@@ -396,10 +396,9 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
             "altitude_m": alt_data[i] if i < len(alt_data) else None,
             "heart_rate_bpm": hr_data[i] if i < len(hr_data) else None,
             "cadence": raw_cadence,
-            "speed_m_s": velocity_data[i] if i < len(velocity_data) else None,
         }
         transformed_rows.append(point)
-
+        
     raw_run_df = pd.DataFrame(transformed_rows)
     if raw_run_df.empty:
         raise HTTPException(status_code=400, detail="No valid tracking data found from Strava streams.")
@@ -407,37 +406,42 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     run_df = prepare_run_df(raw_run_df)
     if run_df["latitude"].isna().all() or run_df["longitude"].isna().all():
         raise HTTPException(status_code=400, detail="No GPS data found inside this activity track.")
-
+        
+    # ------------------------------------------------------------------------------
+    # THE RE-INJECTION TUNNEL: SAFELY MERGE LIVE STREAMS AS DATETIME OBJECTS
+    # ------------------------------------------------------------------------------
     streams_map = pd.DataFrame({
         "time": [(base_start_time + timedelta(seconds=t)).strftime("%Y-%m-%d %H:%M:%S") for t in time_data]
     })
     if len(dist_data) > 0:
         streams_map["distance_m"] = pd.to_numeric(dist_data, errors="coerce")
-    if len(alt_data) > 0:
-        streams_map["altitude_m"] = pd.to_numeric(alt_data, errors="coerce")
 
     streams_map = streams_map.groupby("time", as_index=False).mean()
     streams_map["time"] = pd.to_datetime(streams_map["time"])
 
-    run_df = run_df.drop(columns=["distance_m"], errors="ignore")
-    run_df = pd.merge(run_df, streams_map, on="time", how="left", suffixes=("", "_stream"))
-
-    if "altitude_m_stream" in run_df.columns:
-        run_df["altitude_m"] = pd.to_numeric(run_df["altitude_m_stream"], errors="coerce").fillna(
-            pd.to_numeric(run_df.get("altitude_m"), errors="coerce")
-        )
-        run_df = run_df.drop(columns=["altitude_m_stream"], errors="ignore")
+    run_df = run_df.drop(columns=["distance_m", "speed_m_s", "speed_smooth_m_s"], errors="ignore")
+    run_df = pd.merge(run_df, streams_map, on="time", how="left")
+    # ------------------------------------------------------------------------------
 
     run_df = add_deltas(run_df)
-    run_df = add_smoothed_speed(run_df, window_s=3.0)
+    run_df = add_smoothed_speed(run_df)
 
-    if "speed_m_s" in run_df.columns:
-        run_df["speed_m_s"] = pd.to_numeric(run_df["speed_m_s"], errors="coerce")
-    if "speed_smooth_m_s" in run_df.columns:
-        run_df["speed_smooth_m_s"] = pd.to_numeric(run_df["speed_smooth_m_s"], errors="coerce")
-
-    run_df["pace_min_per_km"] = 1000.0 / (60.0 * run_df["speed_smooth_m_s"])
-    run_df["pace_min_per_km"] = run_df["pace_min_per_km"].replace([float("inf"), float("-inf")], None)
+    if len(velocity_data) > 0:
+        vel_map = pd.DataFrame({
+            "time": [(base_start_time + timedelta(seconds=t)).strftime("%Y-%m-%d %H:%M:%S") for t in time_data],
+            "true_speed": pd.to_numeric(velocity_data, errors="coerce")
+        }).groupby("time", as_index=False).mean()
+        vel_map["time"] = pd.to_datetime(vel_map["time"])
+        
+        run_df = pd.merge(run_df, vel_map, on="time", how="left")
+        
+        run_df["speed_m_s"] = run_df["true_speed"].fillna(run_df["speed_m_s"])
+        run_df["speed_smooth_m_s"] = run_df["true_speed"].fillna(run_df["speed_smooth_m_s"])
+        
+        run_df["pace_min_per_km"] = 1000.0 / (60.0 * run_df["speed_smooth_m_s"])
+        run_df["pace_min_per_km"] = run_df["pace_min_per_km"].replace([float('inf'), float('-inf')], None)
+        
+        run_df = run_df.drop(columns=["true_speed"])
 
     first_row_time = run_df["time"].min()
     orig_start_str = first_row_time.strftime("%Y-%m-%d %H:%M:%S") if pd.notna(first_row_time) else "Unknown"
@@ -449,64 +453,52 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     motion_segments_csv = prepare_for_csv(motion_segments_df, time_cols=["start_time", "end_time"], tz_name=tz_name)
 
     perfstats = compute_performance_stats(run_df, tz_name=tz_name)
-
+    
     run_df_collapsed = collapse_run_streams_for_map(run_df, tz_name=tz_name)
-
+    
     p_map = run_df[["time", "pace_min_per_km", "speed_smooth_m_s"]].copy()
     p_map["time"] = utc_to_local_string(p_map["time"], tz_name=tz_name)
     p_map = p_map.groupby("time", as_index=False).mean()
     p_map["time"] = p_map["time"].astype(str)
-
+    
     run_df_collapsed["time"] = run_df_collapsed["time"].astype(str)
     run_df_collapsed = pd.merge(run_df_collapsed, p_map, on="time", how="left")
 
     lookup = build_lookup(run_df_collapsed)
+
     seg_df_enriched = enrich_segments(motion_segments_csv, lookup)
     segments, plot_df = build_segments_payload(run_df_collapsed, seg_df_enriched)
-
+    
     if not segments:
         raise HTTPException(status_code=400, detail="No processing segments could be generated.")
 
     metricstats = compute_metric_stats(seg_df_enriched)
-    runstats = compute_run_stats(
-        run_df,
-        seg_df_enriched,
-        tz_name,
-        ascent_descent_threshold_m=0.0,
-        trust_source_altitude=True,
-    )
+    runstats = compute_run_stats(run_df, seg_df_enriched, tz_name)
     runstats["original_start_time"] = orig_start_str
 
     base_cols = ["time", "latitude", "longitude"]
+    # FIXED: Restored explicit "distance_m" metrics passthrough to unlock high-res map split tracing rules
     optional_cols = ["heart_rate_bpm", "cadence", "altitude_m", "pace_min_per_km", "motion_state", "distance_m"]
-
+    
     tp_df = plot_df.copy()
     cols_to_extract = [col for col in base_cols if col in tp_df.columns]
     for col in optional_cols:
-        if col in tp_df.columns:
-            cols_to_extract.append(col)
+        if col in tp_df.columns: cols_to_extract.append(col)
 
     if pd.api.types.is_datetime64_any_dtype(tp_df["time"]):
         tp_df["time"] = tp_df["time"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
     track_points = tp_df[cols_to_extract].to_dict(orient="records")
-    runstats["location_city"] = reverse_geocode_city(
-        temp_plot_df.iloc[0]["latitude"],
-        temp_plot_df.iloc[0]["longitude"]
-    ) if not temp_plot_df.empty else "Local Route"
+    runstats["location_city"] = reverse_geocode_city(temp_plot_df.iloc[0]["latitude"], temp_plot_df.iloc[0]["longitude"]) if not temp_plot_df.empty else "Local Route"
 
     existing_id = None
     if current_user_id:
         try:
             with get_db_cursor() as cur:
-                cur.execute(
-                    "SELECT id FROM activities WHERE user_id = %s AND original_start_time = %s;",
-                    (current_user_id, orig_start_str)
-                )
+                cur.execute("SELECT id FROM activities WHERE user_id = %s AND original_start_time = %s;", (current_user_id, orig_start_str))
                 match_row = cur.fetchone()
-                if match_row:
-                    existing_id = str(match_row[0])
-        except Exception:
+                if match_row: existing_id = str(match_row[0])
+        except Exception: 
             pass
 
     raw_payload = {
@@ -579,14 +571,7 @@ async def analyze_run(request: Request, file: UploadFile = File(...), apply_priv
             raise HTTPException(status_code=400, detail="No segments could be generated.")
 
         metricstats = compute_metric_stats(seg_df_enriched)
-        runstats = compute_run_stats(
-            run_df,
-            seg_df_enriched,
-            tz_name,
-            ascent_descent_threshold_m=1.5,
-            trust_source_altitude=False,
-        )
-
+        runstats = compute_run_stats(run_df, seg_df_enriched, tz_name)
         runstats["original_start_time"] = orig_start_str
 
         base_cols = ["time", "latitude", "longitude"]
