@@ -29,7 +29,8 @@ STOP_SPEED_THRESH = 0.8
 WALK_CADENCE_MAX = 140
 WALK_SPEED_MAX = 2
 DISPLAY_DECIMALS = 2
-SMOOTHWINDOW = 5.0
+# Change from 5.0 down to 2.5 to restore spiky, organic sensor telemetry metrics
+SMOOTHWINDOW = 2.5 
 MIN_SEGMENT_TIME_S = 5.0     # seconds: below this is considered tiny
 MIN_SEGMENT_DIST_M = 5.0     # meters: below this is considered tiny
 CADENCE_MULTIPLE = 2
@@ -310,7 +311,11 @@ def add_deltas(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def add_smoothed_speed(df: pd.DataFrame, window_s: float = 5.0) -> pd.DataFrame:
+def add_smoothed_speed(df: pd.DataFrame, window_s: float = SMOOTHWINDOW) -> pd.DataFrame:
+    """
+    Applies a tight moving-average filter across tracking coordinate sequences.
+    Dialed down to preserve crisp micro-variations for high-fidelity runner analysis.
+    """
     df = df.copy()
     if "distance_m" not in df.columns:
         return df
@@ -327,6 +332,7 @@ def add_smoothed_speed(df: pd.DataFrame, window_s: float = 5.0) -> pd.DataFrame:
             df["speed_smooth_m_s"] = 0.0
         return df
 
+    # Rolling calculation bound to the tuned window configurations
     dist_roll = df_ts["distance_m"].rolling(f"{int(window_s)}s", min_periods=2).apply(
         lambda x: x.iloc[-1] - x.iloc[0],
         raw=False,
@@ -1549,7 +1555,7 @@ def main():
     with measure_time("4. Prepare & Smooth Data", timings, is_bench):
         run_df = prepare_run_df(raw_run_df)
         run_df = add_deltas(run_df)
-        run_df = add_smoothed_speed(run_df)
+        run_df = add_smoothed_speed(run_df, window_s=SMOOTHWINDOW)
         
         # EXTRACT TIMEZONE EARLY
         temp_plot_df = raw_run_df.copy()
