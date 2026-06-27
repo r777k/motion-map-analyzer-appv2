@@ -790,9 +790,18 @@ function App() {
       {/* RIGHT DISPLAY CANVASES */}
       <div className="flex-1 h-full p-4 flex flex-col space-y-4 overflow-hidden min-w-0">
          <div className="flex-1 w-full relative rounded-xl overflow-hidden shadow-sm">
-            {data.trackpoints && (
-              <RouteMap segments={data.segments} trackpoints={data.trackpoints} config={mapConfig} splits={data.performance?.km_splits} activeHighlight={activeHighlight} hoveredTrackpoint={hoveredTrackpoint} setActiveHighlight={setActiveHighlight} theme={theme} />
-            )}
+           {data.trackpoints && (
+             <RouteMap 
+               segments={data.segments} 
+               trackpoints={data.trackpoints}  // <-- Each trackpoint now includes a valid tp.distance_m field
+               config={mapConfig} 
+               splits={data.performance?.km_splits} 
+               activeHighlight={activeHighlight} 
+               hoveredTrackpoint={hoveredTrackpoint} 
+               setActiveHighlight={setActiveHighlight} 
+               theme={theme} 
+             />
+           )}
          </div>
          <div className="w-full flex-shrink-0 flex flex-col space-y-2">
             {data.trackpoints && (
