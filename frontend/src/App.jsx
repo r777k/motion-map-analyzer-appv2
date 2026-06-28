@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { UploadCloud, Info, X, Sun, Moon, Download, Camera, LogIn, LogOut, KeyRound, Calendar, MapPin, Trash2, Search, ArrowUpDown, BarChart3, Clock, Milestone } from 'lucide-react';
+import { UploadCloud, Info, X, Sun, Moon, Download, Camera, LogIn, LogOut, KeyRound, Calendar, MapPin, Trash2, Search, ArrowUpDown, BarChart3, Clock, Milestone, AlertTriangle } from 'lucide-react';
 
 import RunSummary from './components/RunSummary';
 import PerformanceStats from './components/PerformanceStats';
@@ -29,6 +29,7 @@ function App() {
   const [authStep, setAuthStep] = useState(1); 
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState(null);
+  const [sessionExpired, setSessionExpired] = useState(false); // Graceful session timeout indicator
 
   // --- HISTORY MODE NAVIGATION CONFIGS ---
   const [activeSidebarTab, setActiveSidebarTab] = useState('upload'); 
@@ -81,13 +82,18 @@ function App() {
   }, []);
 
   // --- AUTOMATIC CLEAN LOGOUT CLEANER FOR EXPIRED SESSIONS ---
-  const handleLogout = () => {
+  const handleLogout = (isTimeout = false) => {
     localStorage.removeItem('motion_map_token');
     setUserToken(null); 
     setActiveSidebarTab('upload'); 
     handleCloseRun();
     setHistoryItems([]);
     setStravaFeedItems([]);
+    if (isTimeout === true) {
+      setSessionExpired(true);
+    } else {
+      setSessionExpired(false);
+    }
   };
 
   // --- METRIC DATA FETCHERS WITH STALE-CLOSURE OVERRIDES ---
@@ -101,10 +107,11 @@ function App() {
         headers: { Authorization: `Bearer ${activeToken}` }
       });
       setHistoryItems(res.data.history || []);
+      setSessionExpired(false); // Clear interceptor banners on successful data returns
     } catch (err) {
       console.error("Failed to populate history feed:", err);
       if (err.response?.status === 401) {
-        handleLogout(); // Auto-purge invalid sessions
+        handleLogout(true); // Trigger explicit session-expired warning banner
       }
     } finally {
       setHistoryLoading(false);
@@ -121,7 +128,7 @@ function App() {
       .then(res => setStravaFeedItems(res.data.activities || []))
       .catch((err) => {
         console.error("Could not populate live Strava stream options.");
-        if (err.response?.status === 401) handleLogout();
+        if (err.response?.status === 401) handleLogout(true);
       })
       .finally(() => setStravaFeedLoading(false));
     }
@@ -145,8 +152,8 @@ function App() {
           const freshToken = res.data.access_token;
           localStorage.setItem('motion_map_token', freshToken);
           setUserToken(freshToken);
+          setSessionExpired(false);
           
-          // CRITICAL FIX: Push fresh token directly to bypass reactive closure delay
           setActiveSidebarTab('history');
           fetchUserHistoryList(freshToken);
         }
@@ -170,7 +177,7 @@ function App() {
       setData(res.data.data);
     } catch (err) {
       setError("Failed to download and parse high-resolution telemetry streams from Strava.");
-      if (err.response?.status === 401) handleLogout();
+      if (err.response?.status === 401) handleLogout(true);
     } finally {
       setLoading(false);
     }
@@ -216,7 +223,7 @@ function App() {
       setData(historicalWorkspace);
     } catch (err) {
       setError("Failed to stream saved activity analytics profiles.");
-      if (err.response?.status === 401) handleLogout();
+      if (err.response?.status === 401) handleLogout(true);
     } finally {
       setLoading(false);
     }
@@ -240,7 +247,7 @@ function App() {
       fetchUserHistoryList(userToken);
     } catch (err) {
       alert("Failed to pin active workout data to cloud tables.");
-      if (err.response?.status === 401) handleLogout();
+      if (err.response?.status === 401) handleLogout(true);
     }
   };
 
@@ -257,7 +264,7 @@ function App() {
       }
     } catch (err) {
       alert("Failed to erase log row records.");
-      if (err.response?.status === 401) handleLogout();
+      if (err.response?.status === 401) handleLogout(true);
     }
   };
 
@@ -277,7 +284,7 @@ function App() {
       setData(response.data.data);
     } catch (err) {
       setError(err.response?.data?.detail || "An error occurred connecting to the server.");
-      if (err.response?.status === 401) handleLogout();
+      if (err.response?.status === 401) handleLogout(true);
     } finally {
       setLoading(false);
     }
@@ -312,9 +319,10 @@ function App() {
       localStorage.setItem('motion_map_token', token);
       setUserToken(token);
       setAuthModalOpen(false);
+      setSessionExpired(false);
       setAuthEmail(''); setAuthOTP(''); setAuthStep(1);
       setActiveSidebarTab('history');
-      fetchUserHistoryList(token); // Fix state lag on login pass
+      fetchUserHistoryList(token);
     } catch (err) {
       setAuthError(err.response?.data?.detail || "Invalid or expired authorization code.");
     } finally {
@@ -462,10 +470,10 @@ function App() {
         <div className="absolute top-6 right-6 flex items-center space-x-3">
           {userToken ? (
             <div className="flex items-center space-x-2">
-              <button onClick={() => { setActiveSidebarTab(activeSidebarTab === 'history' ? 'upload' : 'history'); }} className={`px-3 py-2 text-xs font-bold rounded-xl border transition-all ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200 hover:bg-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+              <button onClick={() => { setSessionExpired(false); setActiveSidebarTab(activeSidebarTab === 'history' ? 'upload' : 'history'); }} className={`px-3 py-2 text-xs font-bold rounded-xl border transition-all ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200 hover:bg-slate-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                 {activeSidebarTab === 'history' ? "Go to Upload" : "View History Log"}
               </button>
-              <button onClick={handleLogout} className="px-4 py-2 text-xs font-black rounded-xl border flex items-center space-x-2 bg-red-500/10 border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all">
+              <button onClick={() => handleLogout(false)} className="px-4 py-2 text-xs font-black rounded-xl border flex items-center space-x-2 bg-red-500/10 border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all">
                 <LogOut className="w-4 h-4" /> <span>Sign Out</span>
               </button>
             </div>
@@ -485,6 +493,18 @@ function App() {
           <h1 className="text-4xl font-black tracking-tight mb-1">Motion Map Analyzer</h1>
           <p className={`text-xs font-bold uppercase tracking-widest ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Interactive Workout Analytics Workspace</p>
         </header>
+
+        {/* EXPLICIT GRACEFUL SESSION EXPIRATION INTERCEPTOR BANNER */}
+        {sessionExpired && (
+          <div className="w-full max-w-xl mb-6 p-4 rounded-xl border flex items-center space-x-3 bg-red-500/10 border-red-500/20 text-red-500 text-xs font-bold shadow-sm">
+            <AlertTriangle className="w-5 h-5 flex-shrink-0 animate-bounce" />
+            <div className="flex-1">
+              <p className="font-black uppercase tracking-wide">Your session has expired</p>
+              <p className="font-medium text-slate-400 mt-0.5">Strava credentials window closed automatically. Please reconnect your account or request an OTP to view logs.</p>
+            </div>
+            <button onClick={() => setSessionExpired(false)} className="p-1 hover:bg-red-500/10 rounded-lg"><X className="w-4 h-4" /></button>
+          </div>
+        )}
 
         {isMobileDevice && (
           <div className="w-full max-w-5xl mb-6 p-3 rounded-xl border text-center text-xs font-bold transition-all bg-amber-500/10 border-amber-500/20 text-amber-500 leading-normal">
@@ -755,12 +775,12 @@ function App() {
 
           <div className="flex items-center space-x-1.5">
             {userToken && (
-              <button onClick={() => { setActiveSidebarTab(activeSidebarTab === 'history' ? 'upload' : 'history'); handleCloseRun(); }} className={`p-1.5 rounded-lg border transition-colors font-bold text-xs ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-600 shadow-sm'}`}>
+              <button onClick={() => { setSessionExpired(false); setActiveSidebarTab(activeSidebarTab === 'history' ? 'upload' : 'history'); handleCloseRun(); }} className={`p-1.5 rounded-lg border transition-colors font-bold text-xs ${theme === 'dark' ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-600 shadow-sm'}`}>
                 {activeSidebarTab === 'history' ? "Upload" : "History"}
               </button>
             )}
             {userToken && (
-              <button onClick={handleLogout} className="p-1.5 rounded-lg border bg-red-500/10 border-red-500/20 text-red-500"><LogOut className="w-4 h-4" /></button>
+              <button onClick={() => handleLogout(false)} className="p-1.5 rounded-lg border bg-red-500/10 border-red-500/20 text-red-500"><LogOut className="w-4 h-4" /></button>
             )}
             <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="p-1.5 rounded-lg border">{theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-500" />}</button>
             <button onClick={handleCloseRun} className="p-1.5 rounded-lg border"><X className="w-4 h-4" /></button>
