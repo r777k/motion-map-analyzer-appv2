@@ -25,6 +25,12 @@ const METRIC_KEYS = {
   'Cadence': 'cadence'
 };
 
+const STATE_COLORS = {
+  'Running': '#3b82f6',
+  'Walking': '#f97316',
+  'Stopped': '#ef4444'
+};
+
 const THICKNESS_MODES = {
   thin: {
     weights: { standard: 2.0, standardActive: 4.0, standardDimmed: 0.8, overlay: 2.5, overlayActive: 4.5, overlayDimmed: 1.0 },
@@ -133,7 +139,6 @@ function RecenterButton({ coords, isDark }) {
 }
 
 export default function RouteMap({ segments, trackpoints, config, splits, activeHighlight, hoveredTrackpoint, setActiveHighlight, theme }) {
-  // CRITICAL TO FIX EXCEPTION 300: Declare hooks FIRST before applying structural escape returns
   const [currentZoom, setCurrentZoom] = useState(13);
   const isDark = theme === 'dark';
 
@@ -147,6 +152,7 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
     return THICKNESS_MODES[currentMode];
   }, [config?.thickness]);
 
+  // Backwards-compatible, robust metric normalization mapping
   const enrichedTrackpoints = useMemo(() => {
     if (!trackpoints || !segments || segments.length === 0) return [];
     let lastKnown = { 'pace_min_per_km': null, 'heart_rate_bpm': null, 'cadence': null, 'altitude_m': null, 'distance_m': null };
@@ -166,41 +172,43 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
     });
   }, [trackpoints, segments]);
 
-  // UNIFIED DEFENSIVE HIGHLIGHT ENGINE: Harmonizes splits, intervals, and brush slices
-  const evaluateHighlightStatus = useMemo(() => {
-    return (item, highlight) => {
+  // UNIFIED EVALUATION LOGIC: Slices metrics down to the single trackpoint row boundary
+  const evaluateTrackpointHighlight = useMemo(() => {
+    return (tp, highlight) => {
       if (!highlight) return true;
 
-      // Match strategy A: Direct string boundaries (rolling intervals, time blocks)
+      // 1. Time or Interval Range Matchers (Time Brushes / Rolling Best Workouts)
       const hStart = highlight.start || highlight.start_time;
       const hEnd = highlight.end || highlight.end_time;
-
       if (hStart && hEnd) {
-        if (item.time) {
-          return item.time >= hStart && item.time <= hEnd;
-        } else if (item.start_time && item.end_time) {
-          return item.start_time <= hEnd && item.end_time >= hStart;
-        }
+        return tp.time >= hStart && tp.time <= hEnd;
       }
 
-      // Match strategy B: Coarse index mapping fallback
+      // 2. Kilometer Split Boundary Matchers
       if (highlight.type === 'split' && highlight.index !== undefined) {
         const targetSplit = splits?.find(s => s.index === highlight.index);
         if (targetSplit) {
-          if (item.time) return item.time >= targetSplit.start_time && item.time <= targetSplit.end_time;
-          if (item.start_time && item.end_time) return item.start_time <= targetSplit.end_time && item.end_time >= targetSplit.start_time;
+          return tp.time >= targetSplit.start_time && tp.time <= targetSplit.end_time;
         }
-        if (item._distance_m !== undefined) {
-          const sDist = (highlight.index - 1) * 1000;
-          const eDist = highlight.index * 1000;
-          return item._distance_m >= sDist && item._distance_m <= eDist;
-        }
+        // Fallback to absolute distance vectors if timestamps are missing
+        const startDist = (highlight.index - 1) * 1000;
+        const endDist = highlight.index * 1000;
+        return tp._distance_m >= startDist && tp._distance_m <= endDist;
       }
+
+      // 3. Metric Histogram Bin Matchers
+      if (highlight.type === 'metric') {
+        const val = tp[`_${highlight.metricKey}`];
+        if (val == null) return false;
+        if (highlight.isFirstBin) return val <= highlight.max;
+        if (highlight.isLastBin) return val >= highlight.min;
+        return val >= highlight.min && val <= highlight.max;
+      }
+
       return false;
     };
   }, [splits]);
 
-  // Clean boundary protection exit
   if (!segments || segments.length === 0 || !config) return null;
 
   const renderSegmentTooltip = (seg, idx) => {
@@ -237,6 +245,69 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
       </Tooltip>
     );
   };
+
+  // ARCHITECTURAL UPGRADE: Contiguous Point-to-Point Path Assembly Layer
+  const baseStandardPolylines = useMemo(() => {
+    if (config.overlayMetric !== 'None' || (activeHighlight?.type === 'metric')) return [];
+    if (enrichedTrackpoints.length === 0) return [];
+
+    const segmentsList = [];
+    let currentChunk = [];
+    let currentState = null;
+    let currentHighlightStatus = null;
+    const baseWeights = modeConfig.weights;
+
+    for (let i = 0; i < enrichedTrackpoints.length; i++) {
+      const tp = enrichedTrackpoints[i];
+      if (!config.motionTypes[tp._motionState]) {
+        if (currentChunk.length > 1) {
+          segmentsList.push({ coords: currentChunk, state: currentState, highlighted: currentHighlightStatus });
+        }
+        currentChunk = [];
+        continue;
+      }
+
+      const isHighlighted = evaluateTrackpointHighlight(tp, activeHighlight);
+
+      if (currentState === null) {
+        currentState = tp._motionState;
+        currentHighlightStatus = isHighlighted;
+      }
+
+      // Slice the line instantly when the highlight or motion state boundaries shift
+      if (tp._motionState !== currentState || isHighlighted !== currentHighlightStatus) {
+        if (currentChunk.length > 0) {
+          currentChunk.push([tp.latitude, tp.longitude]); // Connect the gap cleanly
+          segmentsList.push({ coords: currentChunk, state: currentState, highlighted: currentHighlightStatus });
+        }
+        currentChunk = [[tp.latitude, tp.longitude]];
+        currentState = tp._motionState;
+        currentHighlightStatus = isHighlighted;
+      } else {
+        currentChunk.push([tp.latitude, tp.longitude]);
+      }
+    }
+    if (currentChunk.length > 1) {
+      segmentsList.push({ coords: currentChunk, state: currentState, highlighted: currentHighlightStatus });
+    }
+
+    return segmentsList.map((chunk, idx) => {
+      const pathColor = STATE_COLORS[chunk.state] || '#3b82f6';
+      const weight = activeHighlight 
+        ? (chunk.highlighted ? getZoomWeight(baseWeights.standardActive, currentZoom) : getZoomWeight(baseWeights.standardDimmed, currentZoom)) 
+        : getZoomWeight(baseWeights.standard, currentZoom);
+      const opacity = activeHighlight ? (chunk.highlighted ? 1.0 : 0.15) : 0.8;
+
+      return (
+        <Polyline 
+          key={`base-chunk-${idx}`} 
+          positions={chunk.coords}
+          className="custom-leaflet-track-vector"
+          pathOptions={{ color: pathColor, weight: weight, opacity: opacity, lineCap: 'round', strokeLinejoin: 'round' }}
+        />
+      );
+    });
+  }, [enrichedTrackpoints, config.overlayMetric, config.motionTypes, activeHighlight, currentZoom, modeConfig, evaluateTrackpointHighlight]);
 
   const overlayPolylines = useMemo(() => {
     const activeMetricTab = config.overlayMetric !== 'None' 
@@ -284,22 +355,7 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
       let colorVal = colorScale(val);
       if (internalKey === '_pace_min_per_km' || config.colorScale === 'warmcool') colorVal = 1 - colorVal;
 
-      let isPointSelected = true;
-      if (activeHighlight) {
-        if (activeHighlight.type === 'metric') {
-          const targetPointValue = p1[`_${activeHighlight.metricKey}`];
-          if (targetPointValue != null) {
-            if (activeHighlight.isFirstBin) isPointSelected = targetPointValue <= activeHighlight.max;
-            else if (activeHighlight.isLastBin) isPointSelected = targetPointValue >= activeHighlight.min;
-            else isPointSelected = targetPointValue >= activeHighlight.min && targetPointValue <= activeHighlight.max;
-          } else {
-            isPointSelected = false;
-          }
-        } else {
-          isPointSelected = evaluateHighlightStatus(p1, activeHighlight);
-        }
-      }
-
+      const isPointSelected = evaluateTrackpointHighlight(p1, activeHighlight);
       const parentSegmentIndex = segments.findIndex(seg => p1.time >= seg.start_time && p1.time <= seg.end_time);
       const matchedSegment = segments[parentSegmentIndex];
 
@@ -331,7 +387,7 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
       );
     }
     return lines;
-  }, [enrichedTrackpoints, config.overlayMetric, config.colorScale, config.motionTypes, activeHighlight, currentZoom, modeConfig, segments, evaluateHighlightStatus, setActiveHighlight]);
+  }, [enrichedTrackpoints, config.overlayMetric, config.colorScale, config.motionTypes, activeHighlight, currentZoom, modeConfig, segments, evaluateTrackpointHighlight, setActiveHighlight]);
 
   const mapMarkers = useMemo(() => {
     if (!trackpoints || trackpoints.length === 0) return [];
@@ -391,7 +447,6 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
 
   const tileUrl = BASE_MAPS[config.baseMap];
   const useBaseMapTiles = config.baseMap !== 'No Map';
-  const baseWeights = modeConfig.weights;
 
   return (
     <div className={`absolute inset-0 rounded-xl shadow-md border overflow-hidden z-0 transition-all duration-200 ${
@@ -406,38 +461,10 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
         
         <RecenterButton coords={allCoords} isDark={isDark} />
         
-        {config.overlayMetric === 'None' && (!activeHighlight || activeHighlight.type !== 'metric') && 
-          segments.filter(seg => config.motionTypes[seg.label.charAt(0).toUpperCase() + seg.label.slice(1).toLowerCase()]).map((seg, index) => {
-            const isHighlighted = evaluateHighlightStatus(seg, activeHighlight);
+        {/* Dynamic high-fidelity base rendering blocks */}
+        {baseStandardPolylines}
 
-            const polylineHandlers = {
-              click: () => {
-                if (setActiveHighlight) {
-                  const uniqueId = `seg-${index}`;
-                  if (activeHighlight?.id === uniqueId) setActiveHighlight(null);
-                  else setActiveHighlight({ type: 'time', id: uniqueId, start: seg.start_time, end: seg.end_time });
-                }
-              }
-            };
-
-            return (
-              <Polyline key={index} positions={seg.coords} 
-                eventHandlers={polylineHandlers}
-                className="custom-leaflet-track-vector"
-                pathOptions={{ 
-                  color: seg.color || '#3b82f6', 
-                  weight: activeHighlight 
-                    ? (isHighlighted ? getZoomWeight(baseWeights.standardActive, currentZoom) : getZoomWeight(baseWeights.standardDimmed, currentZoom)) 
-                    : getZoomWeight(baseWeights.standard, currentZoom), 
-                  opacity: activeHighlight ? (isHighlighted ? 1.0 : 0.15) : 0.8, 
-                  dashArray: seg.dashArray || null 
-                }} 
-              >
-                {renderSegmentTooltip(seg, index)}
-              </Polyline>
-            );
-        })}
-
+        {/* Dynamic color-scaled metric overlays */}
         {((config.overlayMetric !== 'None') || (activeHighlight?.type === 'metric')) && overlayPolylines}
 
         {mapMarkers.map(m => {
