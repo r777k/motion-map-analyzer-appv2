@@ -141,6 +141,37 @@ export default function ElevationProfile({ trackpoints, segments, config, active
     return { chartData: dataPoints, elevBounds: { min: elevMin, max: elevMax } };
   }, [trackpoints, segments, config.motionTypes]);
 
+  // CRITICAL HOOK FIX: Shifted from JSX block expression to top-level function context
+  const motionBlocks = useMemo(() => {
+    if (chartData.length === 0) return null;
+    const blocks = [];
+    let currentType = chartData[0].motionState;
+    let startDist = chartData[0].distance;
+
+    for (let i = 1; i < chartData.length; i++) {
+      if (chartData[i].motionState !== currentType || i === chartData.length - 1) {
+        const endDist = chartData[i].distance;
+        const totalSpan = chartData[chartData.length - 1].distance || 1;
+        const pctWidth = ((endDist - startDist) / totalSpan) * 100;
+
+        let color = '#3b82f6'; 
+        if (currentType === 'Walking') color = '#f97316'; 
+        if (currentType === 'Stopped') color = '#ef4444'; 
+
+        blocks.push(
+          <div key={i} style={{ width: `${pctWidth}%`, backgroundColor: color }} className="h-full relative group">
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-slate-950 text-white text-[9px] px-1.5 py-0.5 rounded shadow-md pointer-events-none whitespace-nowrap z-50">
+              {currentType}
+            </div>
+          </div>
+        );
+        startDist = endDist;
+        currentType = chartData[i].motionState;
+      }
+    }
+    return blocks;
+  }, [chartData]);
+
   const cycleMetricState = (metricKey) => {
     setMetricStates(prev => {
       let nextState = prev[metricKey] === 'on' ? 'front' : prev[metricKey] === 'front' ? 'off' : 'on';
@@ -156,7 +187,8 @@ export default function ElevationProfile({ trackpoints, segments, config, active
     if (e && e.activeTooltipIndex !== undefined && chartData[e.activeTooltipIndex]) {
       const activeRecord = chartData[e.activeTooltipIndex];
       setHoveredTrackpoint(activeRecord.rawPoint);
-      if (refAreaLeft) setRefAreaRight(r.distance);
+      // TYPO RECOVERY FIX: Safely bind pointer updates to valid object keys instead of undefined 'r'
+      if (refAreaLeft) setRefAreaRight(activeRecord.distance);
     }
   };
 
@@ -291,36 +323,8 @@ export default function ElevationProfile({ trackpoints, segments, config, active
         </ResponsiveContainer>
       </div>
 
-      {/* --- ADDED BACK: MOTION-TYPE CATEGORICAL CONTEXT STRIP BAR --- */}
       <div className={`h-1.5 w-full mt-3 flex rounded-full overflow-hidden border ${isDark ? 'border-slate-950 bg-slate-950' : 'border-slate-100 bg-slate-100'}`}>
-        {chartData.length > 0 && useMemo(() => {
-          const blocks = [];
-          let currentType = chartData[0].motionState;
-          let startDist = chartData[0].distance;
-
-          for (let i = 1; i < chartData.length; i++) {
-            if (chartData[i].motionState !== currentType || i === chartData.length - 1) {
-              const endDist = chartData[i].distance;
-              const totalSpan = chartData[chartData.length - 1].distance || 1;
-              const pctWidth = ((endDist - startDist) / totalSpan) * 100;
-
-              let color = '#3b82f6'; // Running
-              if (currentType === 'Walking') color = '#f97316'; // Walking
-              if (currentType === 'Stopped') color = '#ef4444'; // Stopped
-
-              blocks.push(
-                <div key={i} style={{ width: `${pctWidth}%`, backgroundColor: color }} className="h-full relative group">
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-slate-950 text-white text-[9px] px-1.5 py-0.5 rounded shadow-md pointer-events-none whitespace-nowrap z-50">
-                    {currentType}
-                  </div>
-                </div>
-              );
-              startDist = endDist;
-              currentType = chartData[i].motionState;
-            }
-          }
-          return blocks;
-        }, [chartData])}
+        {motionBlocks}
       </div>
     </div>
   );

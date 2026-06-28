@@ -133,20 +133,22 @@ function RecenterButton({ coords, isDark }) {
 }
 
 export default function RouteMap({ segments, trackpoints, config, splits, activeHighlight, hoveredTrackpoint, setActiveHighlight, theme }) {
-  if (!segments || segments.length === 0 || !config) return null;
-
+  // CRITICAL TO FIX EXCEPTION 300: Declare hooks FIRST before applying structural escape returns
   const [currentZoom, setCurrentZoom] = useState(13);
   const isDark = theme === 'dark';
-  const allCoords = useMemo(() => segments.flatMap(seg => seg.coords), [segments]);
+
+  const allCoords = useMemo(() => {
+    if (!segments || segments.length === 0) return [];
+    return segments.flatMap(seg => seg.coords);
+  }, [segments]);
 
   const modeConfig = useMemo(() => {
-    const currentMode = config.thickness || 'medium';
+    const currentMode = config?.thickness || 'medium';
     return THICKNESS_MODES[currentMode];
-  }, [config.thickness]);
+  }, [config?.thickness]);
 
-  // UPGRADED: Added 'distance_m' to forward-fill rules to enable granular geometric split tracking
   const enrichedTrackpoints = useMemo(() => {
-    if (!trackpoints) return [];
+    if (!trackpoints || !segments || segments.length === 0) return [];
     let lastKnown = { 'pace_min_per_km': null, 'heart_rate_bpm': null, 'cadence': null, 'altitude_m': null, 'distance_m': null };
 
     return trackpoints.map(tp => {
@@ -163,6 +165,43 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
       return enrichedTp;
     });
   }, [trackpoints, segments]);
+
+  // UNIFIED DEFENSIVE HIGHLIGHT ENGINE: Harmonizes splits, intervals, and brush slices
+  const evaluateHighlightStatus = useMemo(() => {
+    return (item, highlight) => {
+      if (!highlight) return true;
+
+      // Match strategy A: Direct string boundaries (rolling intervals, time blocks)
+      const hStart = highlight.start || highlight.start_time;
+      const hEnd = highlight.end || highlight.end_time;
+
+      if (hStart && hEnd) {
+        if (item.time) {
+          return item.time >= hStart && item.time <= hEnd;
+        } else if (item.start_time && item.end_time) {
+          return item.start_time <= hEnd && item.end_time >= hStart;
+        }
+      }
+
+      // Match strategy B: Coarse index mapping fallback
+      if (highlight.type === 'split' && highlight.index !== undefined) {
+        const targetSplit = splits?.find(s => s.index === highlight.index);
+        if (targetSplit) {
+          if (item.time) return item.time >= targetSplit.start_time && item.time <= targetSplit.end_time;
+          if (item.start_time && item.end_time) return item.start_time <= targetSplit.end_time && item.end_time >= targetSplit.start_time;
+        }
+        if (item._distance_m !== undefined) {
+          const sDist = (highlight.index - 1) * 1000;
+          const eDist = highlight.index * 1000;
+          return item._distance_m >= sDist && item._distance_m <= eDist;
+        }
+      }
+      return false;
+    };
+  }, [splits]);
+
+  // Clean boundary protection exit
+  if (!segments || segments.length === 0 || !config) return null;
 
   const renderSegmentTooltip = (seg, idx) => {
     const stateLabel = seg.label.charAt(0).toUpperCase() + seg.label.slice(1).toLowerCase();
@@ -256,18 +295,8 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
           } else {
             isPointSelected = false;
           }
-        } else if (activeHighlight.type === 'time') {
-          isPointSelected = p1.time >= activeHighlight.start && p1.time <= activeHighlight.end;
-        } else if (activeHighlight.type === 'split') {
-          // UPGRADED: Intercepts active kilometer highlights and scales weights point-by-point
-          const targetSplit = splits?.find(s => s.index === activeHighlight.index);
-          if (targetSplit) {
-            isPointSelected = p1.time >= targetSplit.start_time && p1.time <= targetSplit.end_time;
-          } else {
-            const startDist = (activeHighlight.index - 1) * 1000;
-            const endDist = activeHighlight.index * 1000;
-            isPointSelected = p1._distance_m >= startDist && p1._distance_m <= endDist;
-          }
+        } else {
+          isPointSelected = evaluateHighlightStatus(p1, activeHighlight);
         }
       }
 
@@ -302,7 +331,7 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
       );
     }
     return lines;
-  }, [enrichedTrackpoints, config.overlayMetric, config.colorScale, config.motionTypes, activeHighlight, currentZoom, modeConfig, segments, splits, setActiveHighlight]);
+  }, [enrichedTrackpoints, config.overlayMetric, config.colorScale, config.motionTypes, activeHighlight, currentZoom, modeConfig, segments, evaluateHighlightStatus, setActiveHighlight]);
 
   const mapMarkers = useMemo(() => {
     if (!trackpoints || trackpoints.length === 0) return [];
@@ -379,19 +408,7 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
         
         {config.overlayMetric === 'None' && (!activeHighlight || activeHighlight.type !== 'metric') && 
           segments.filter(seg => config.motionTypes[seg.label.charAt(0).toUpperCase() + seg.label.slice(1).toLowerCase()]).map((seg, index) => {
-            let isHighlighted = true;
-            
-            if (activeHighlight) {
-              if (activeHighlight.type === 'time') {
-                isHighlighted = seg.start_time >= activeHighlight.start && seg.end_time <= activeHighlight.end;
-              } else if (activeHighlight.type === 'split') {
-                // UPGRADED: Evaluates segment bounds against active kilometer split intervals
-                const targetSplit = splits?.find(s => s.index === activeHighlight.index);
-                if (targetSplit) {
-                  isHighlighted = seg.start_time <= targetSplit.end_time && seg.end_time >= targetSplit.start_time;
-                }
-              }
-            }
+            const isHighlighted = evaluateHighlightStatus(seg, activeHighlight);
 
             const polylineHandlers = {
               click: () => {
