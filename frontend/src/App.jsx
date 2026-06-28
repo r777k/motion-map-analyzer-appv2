@@ -65,9 +65,10 @@ function App() {
     }));
   }, [theme]);
 
+  // Handle automatic user history loading on state change
   useEffect(() => {
     if (userToken && activeSidebarTab === 'history') {
-      fetchUserHistoryList();
+      fetchUserHistoryList(userToken);
     }
   }, [userToken, activeSidebarTab]);
 
@@ -79,7 +80,54 @@ function App() {
     }
   }, []);
 
-// --- STRAVA API OAUTH INCOMING CALLBACK HANDLER ---
+  // --- AUTOMATIC CLEAN LOGOUT CLEANER FOR EXPIRED SESSIONS ---
+  const handleLogout = () => {
+    localStorage.removeItem('motion_map_token');
+    setUserToken(null); 
+    setActiveSidebarTab('upload'); 
+    handleCloseRun();
+    setHistoryItems([]);
+    setStravaFeedItems([]);
+  };
+
+  // --- METRIC DATA FETCHERS WITH STALE-CLOSURE OVERRIDES ---
+  const fetchUserHistoryList = async (tokenOverride = null) => {
+    const activeToken = tokenOverride || userToken;
+    if (!activeToken) return;
+
+    setHistoryLoading(true);
+    try {
+      const res = await axios.get(`${API_BASE}/api/activities`, {
+        headers: { Authorization: `Bearer ${activeToken}` }
+      });
+      setHistoryItems(res.data.history || []);
+    } catch (err) {
+      console.error("Failed to populate history feed:", err);
+      if (err.response?.status === 401) {
+        handleLogout(); // Auto-purge invalid sessions
+      }
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  // --- POPULATE LIVE STRAVA FEED CAROUSEL OPTIONS ---
+  useEffect(() => {
+    if (userToken && activeSidebarTab === 'history') {
+      setStravaFeedLoading(true);
+      axios.get(`${API_BASE}/api/strava/latest-activities`, {
+        headers: { Authorization: `Bearer ${userToken}` }
+      })
+      .then(res => setStravaFeedItems(res.data.activities || []))
+      .catch((err) => {
+        console.error("Could not populate live Strava stream options.");
+        if (err.response?.status === 401) handleLogout();
+      })
+      .finally(() => setStravaFeedLoading(false));
+    }
+  }, [userToken, activeSidebarTab]);
+
+  // --- STRAVA API OAUTH INCOMING CALLBACK HANDLER ---
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const stravaCode = urlParams.get("code");
@@ -94,32 +142,21 @@ function App() {
       })
       .then((res) => {
         if (res.data && res.data.access_token) {
-          const token = res.data.access_token;
-          localStorage.setItem('motion_map_token', token);
-          setUserToken(token);
+          const freshToken = res.data.access_token;
+          localStorage.setItem('motion_map_token', freshToken);
+          setUserToken(freshToken);
+          
+          // CRITICAL FIX: Push fresh token directly to bypass reactive closure delay
+          setActiveSidebarTab('history');
+          fetchUserHistoryList(freshToken);
         }
-        setActiveSidebarTab('history');
-        fetchUserHistoryList();
       })
       .catch((err) => {
         setError(err.response?.data?.detail || "Failed to verify credentials linkage with your Strava account profile.");
       })
       .finally(() => setLoading(false));
     }
-  }, [userToken]);
-
-  // --- POPULATE LIVE STRAVA FEED CAROUSEL OPTIONS ---
-  useEffect(() => {
-    if (userToken && activeSidebarTab === 'history') {
-      setStravaFeedLoading(true);
-      axios.get(`${API_BASE}/api/strava/latest-activities`, {
-        headers: { Authorization: `Bearer ${userToken}` }
-      })
-      .then(res => setStravaFeedItems(res.data.activities || []))
-      .catch(() => console.error("Could not populate live Strava stream options."))
-      .finally(() => setStravaFeedLoading(false));
-    }
-  }, [userToken, activeSidebarTab]);
+  }, []);
 
   // --- STREAM AND PARSE LIVE HIGH-RES STRAVA WORKOUT ---
   const handleLoadStravaActivity = async (stravaActivityId) => {
@@ -133,6 +170,7 @@ function App() {
       setData(res.data.data);
     } catch (err) {
       setError("Failed to download and parse high-resolution telemetry streams from Strava.");
+      if (err.response?.status === 401) handleLogout();
     } finally {
       setLoading(false);
     }
@@ -165,21 +203,8 @@ function App() {
     setHoveredTrackpoint(null);
   };
 
-  const fetchUserHistoryList = async () => {
-    setHistoryLoading(true);
-    try {
-      const res = await axios.get(`${API_BASE}/api/activities`, {
-        headers: { Authorization: `Bearer ${userToken}` }
-      });
-      setHistoryItems(res.data.history || []);
-    } catch (err) {
-      console.error("Failed to populate history feed:", err);
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
-
   const handleLoadSavedActivity = async (activityId) => {
+    if (!userToken) return;
     setLoading(true);
     setError(null);
     try {
@@ -191,11 +216,11 @@ function App() {
       setData(historicalWorkspace);
     } catch (err) {
       setError("Failed to stream saved activity analytics profiles.");
+      if (err.response?.status === 401) handleLogout();
     } finally {
       setLoading(false);
     }
   };
-
 
   const handleSaveCurrentRun = async () => {
     if (!data || !userToken) return;
@@ -212,9 +237,10 @@ function App() {
       if (res.data && res.data.activity_id) {
         setData(prev => ({ ...prev, id: res.data.activity_id }));
       }
-      fetchUserHistoryList();
+      fetchUserHistoryList(userToken);
     } catch (err) {
       alert("Failed to pin active workout data to cloud tables.");
+      if (err.response?.status === 401) handleLogout();
     }
   };
 
@@ -231,6 +257,7 @@ function App() {
       }
     } catch (err) {
       alert("Failed to erase log row records.");
+      if (err.response?.status === 401) handleLogout();
     }
   };
 
@@ -250,6 +277,7 @@ function App() {
       setData(response.data.data);
     } catch (err) {
       setError(err.response?.data?.detail || "An error occurred connecting to the server.");
+      if (err.response?.status === 401) handleLogout();
     } finally {
       setLoading(false);
     }
@@ -286,16 +314,12 @@ function App() {
       setAuthModalOpen(false);
       setAuthEmail(''); setAuthOTP(''); setAuthStep(1);
       setActiveSidebarTab('history');
+      fetchUserHistoryList(token); // Fix state lag on login pass
     } catch (err) {
       setAuthError(err.response?.data?.detail || "Invalid or expired authorization code.");
     } finally {
       setAuthLoading(false);
     }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('motion_map_token');
-    setUserToken(null); setActiveSidebarTab('upload'); handleCloseRun();
   };
 
   const handleDemoTryout = async () => {
@@ -409,15 +433,14 @@ function App() {
     return h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`;
   };
 
-  // --- MATHS ACCUMULATORS & FILTERS LOGIC ---
-  const cumulativeDistance = historyItems.reduce((acc, curr) => acc + (curr.distance_km || 0), 0);
-  const cumulativeDuration = historyItems.reduce((acc, curr) => acc + (curr.duration_s || 0), 0);
-
   const convertPaceToSeconds = (paceStr) => {
     if (!paceStr || !paceStr.includes(':')) return 999999;
     const parts = paceStr.split(':');
     return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
   };
+
+  const cumulativeDistance = historyItems.reduce((acc, curr) => acc + (curr.distance_km || 0), 0);
+  const cumulativeDuration = historyItems.reduce((acc, curr) => acc + (curr.duration_s || 0), 0);
 
   const filteredAndSortedHistory = historyItems
     .filter(item => {
@@ -426,15 +449,9 @@ function App() {
       return targetCity.includes(historySearchQuery.toLowerCase());
     })
     .sort((a, b) => {
-      if (historySortBy === 'date_desc') {
-        return new Date(b.start_time) - new Date(a.start_time);
-      }
-      if (historySortBy === 'distance_desc') {
-        return (b.distance_km || 0) - (a.distance_km || 0);
-      }
-      if (historySortBy === 'pace_asc') {
-        return convertPaceToSeconds(a.avg_pace_str) - convertPaceToSeconds(b.avg_pace_str);
-      }
+      if (historySortBy === 'date_desc') return new Date(b.start_time) - new Date(a.start_time);
+      if (historySortBy === 'distance_desc') return (b.distance_km || 0) - (a.distance_km || 0);
+      if (historySortBy === 'pace_asc') return convertPaceToSeconds(a.avg_pace_str) - convertPaceToSeconds(b.avg_pace_str);
       return 0;
     });
 
@@ -442,7 +459,6 @@ function App() {
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center p-6 md:p-12 transition-colors duration-200 relative ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
         
-        {/* HEADER TOOLBAR ALIGNMENT */}
         <div className="absolute top-6 right-6 flex items-center space-x-3">
           {userToken ? (
             <div className="flex items-center space-x-2">
@@ -464,18 +480,12 @@ function App() {
           </button>
         </div>
 
-        {/* LOGO TITLE SECTION */}
         <header className="flex flex-col items-center mb-10 text-center flex-shrink-0">
-          <img 
-            src="/logo.png" 
-            alt="Motion Map Analyzer Logo" 
-            className="w-24 h-24 mb-4 select-none pointer-events-none drop-shadow-lg" 
-          />
+          <img src="/logo.png" alt="Logo" className="w-24 h-24 mb-4 select-none pointer-events-none drop-shadow-lg" />
           <h1 className="text-4xl font-black tracking-tight mb-1">Motion Map Analyzer</h1>
           <p className={`text-xs font-bold uppercase tracking-widest ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Interactive Workout Analytics Workspace</p>
         </header>
 
-        {/* DYNAMIC RESPONSIVE MOBILE ACCESSIBILITY ALERT NOTICES */}
         {isMobileDevice && (
           <div className="w-full max-w-5xl mb-6 p-3 rounded-xl border text-center text-xs font-bold transition-all bg-amber-500/10 border-amber-500/20 text-amber-500 leading-normal">
             {isDesktopModeEnabled ? (
@@ -493,7 +503,6 @@ function App() {
               <button onClick={() => setActiveSidebarTab('upload')} className="text-xs text-blue-500 hover:underline font-bold">Upload a new file instead</button>
             </h2>
 
-            {/* CUMULATIVE STATS ACCUMULATOR PANEL WIDGETS */}
             {historyItems.length > 0 && (
               <div className={`grid grid-cols-3 gap-4 mb-5 p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-950/60 border-slate-800/80' : 'bg-slate-50 border-slate-200 shadow-inner'}`}>
                 <div className="flex items-center space-x-3">
@@ -520,7 +529,6 @@ function App() {
               </div>
             )}
 
-            {/* SEARCH BAR FILTERS AND PERFORMANCE SORTING CONTROLS */}
             {historyItems.length > 0 && (
               <div className="flex flex-col sm:flex-row gap-3 mb-4">
                 <div className="flex-1 relative flex items-center">
@@ -548,8 +556,6 @@ function App() {
               </div>
             )}
 
-            {/* RESTORED CAROUSEL: LIVE STRAVA INSTANT FEED SELECTION DRAWER */}
-            {/* UPDATED CONDITION: RENDERS THE CAROUSEL VAULT SECURELY UNDER ACTIVE SESSIONS */}
             {userToken && stravaFeedItems.length > 0 && (
               <div className="mb-5">
                 <h3 className="text-xs font-black uppercase tracking-wider text-[#FC6100] mb-2 flex items-center">
@@ -574,7 +580,6 @@ function App() {
               </div>
             )}
 
-            {/* HISTORY CARDS GRID LEDGER */}
             <div className="flex-1 overflow-y-auto space-y-3 pr-1">
               {historyLoading ? (
                 <div className="h-full flex items-center justify-center text-xs font-bold text-slate-400">Streaming Neon Database Logs...</div>
@@ -609,10 +614,7 @@ function App() {
             </div>
           </div>
         ) : (
-          /* STREAMLINED CONDENSED FEATURE BULLET GRID LAYOUT */
           <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            
-            {/* LEFT COLUMN: SCANNABLE CONDENSED METRIC BULLETS */}
             <div className="lg:col-span-7 space-y-5 p-2">
               <h2 className="text-xl font-black tracking-tight flex items-center mb-2">
                 <span className="mr-2">⚡</span> Quick Start & Feature Highlights
@@ -622,7 +624,7 @@ function App() {
                 <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-sm'}`}>
                   <h3 className="text-xs font-black uppercase tracking-wider text-blue-500 mb-1.5">📁 Easy File Uploads</h3>
                   <ul className="text-xs text-slate-400 space-y-1 font-medium list-disc pl-4">
-                    <li>Supports standard <code className="font-mono text-blue-400 text-[10px]">.fit</code> and Training Center Extension <code className="font-mono text-blue-400 text-[10px]">.tcx</code> sensor streams.</li>
+                    <li>Supports standard <code className="font-mono text-blue-400 text-[10px]">.fit</code> and Tracking Center Extension <code className="font-mono text-blue-400 text-[10px]">.tcx</code> sensor streams.</li>
                     <li>Instantly parses telemetry layouts from Garmin, Coros, Wahoo, and more.</li>
                   </ul>
                 </div>
@@ -657,7 +659,6 @@ function App() {
               </div>
             </div>
 
-            {/* RIGHT COLUMN: RECTANGULAR UPLOAD CONTROL CARD */}
             <div className={`lg:col-span-5 p-8 rounded-2xl shadow-xl border w-full transition-all duration-200 ${theme === 'dark' ? 'bg-slate-900 border-slate-800/80' : 'bg-white border-slate-200'}`}>
               <form onSubmit={handleUpload} className="flex flex-col items-center space-y-5">
                 <div className={`p-4 rounded-full ${theme === 'dark' ? 'bg-slate-950' : 'bg-blue-50'}`}>
@@ -689,7 +690,6 @@ function App() {
                 </button>
               </form>
 
-              {/* DEMO TRYOUT TRIGGER LINK */}
               <div className="text-center mt-4 pt-1 border-t border-dashed border-slate-500/10 flex flex-col items-center space-y-3">
                 <div>
                   <span className="text-xs text-slate-400">Don't have an activity file handy? </span>
@@ -719,7 +719,6 @@ function App() {
 
               {error && <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-xs font-bold text-center leading-normal">{error}</div>}
             </div>
-
           </div>
         )}
       </div>
@@ -729,7 +728,6 @@ function App() {
   return (
     <div className={`flex h-screen overflow-hidden font-sans transition-colors duration-200 ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
       
-      {/* SIDEBAR PANEL */}
       <div 
         style={{ width: `${sidebarWidth}px` }}
         className={`flex-shrink-0 h-full overflow-y-auto p-5 shadow-sm flex flex-col space-y-6 border-r transition-colors duration-200 ${
@@ -738,13 +736,8 @@ function App() {
       >
         <header className={`pb-4 border-b flex justify-between items-start flex-shrink-0 ${theme === 'dark' ? 'border-slate-800' : 'border-slate-200'}`}>
           <div>
-            {/* REPLACED EMOBIS WITH PROPORTIONAL GRAPHIC ICON INLINE NODE */}
             <h1 className="text-lg font-black tracking-tight flex items-center space-x-2">
-              <img 
-                src="/logo.png" 
-                alt="Logo" 
-                className="w-6 h-6 flex-shrink-0 select-none pointer-events-none" 
-              />
+              <img src="/logo.png" alt="Logo" className="w-6 h-6 flex-shrink-0 select-none pointer-events-none" />
               <span>Motion Map Analyzer</span>
             </h1>
             <div className="flex items-center space-x-2 mt-2">
@@ -787,28 +780,16 @@ function App() {
 
       <div onMouseDown={() => setIsDraggingSplitter(true)} className="w-1 h-full cursor-col-resize flex-shrink-0 bg-slate-200 dark:bg-slate-800" />
 
-      {/* RIGHT DISPLAY CANVASES */}
       <div className="flex-1 h-full p-4 flex flex-col space-y-4 overflow-hidden min-w-0">
          <div className="flex-1 w-full relative rounded-xl overflow-hidden shadow-sm">
-           {data.trackpoints && (
-             <RouteMap 
-               segments={data.segments} 
-               trackpoints={data.trackpoints}  // <-- Each trackpoint now includes a valid tp.distance_m field
-               config={mapConfig} 
-               splits={data.performance?.km_splits} 
-               activeHighlight={activeHighlight} 
-               hoveredTrackpoint={hoveredTrackpoint} 
-               setActiveHighlight={setActiveHighlight} 
-               theme={theme} 
-             />
-           )}
+            {data.trackpoints && (
+              <RouteMap segments={data.segments} trackpoints={data.trackpoints} config={mapConfig} splits={data.performance?.km_splits} activeHighlight={activeHighlight} hoveredTrackpoint={hoveredTrackpoint} setActiveHighlight={setActiveHighlight} theme={theme} />
+            )}
          </div>
          <div className="w-full flex-shrink-0 flex flex-col space-y-2">
             {data.trackpoints && (
               <ElevationProfile trackpoints={data.trackpoints} segments={data.segments} config={mapConfig} activeHighlight={activeHighlight} setActiveHighlight={setActiveHighlight} setHoveredTrackpoint={setHoveredTrackpoint} theme={theme} />
             )}
-            
-            {/* FOOTER DATA NOTICE SUB-BAR */}
             <div className="text-center w-full select-none pointer-events-none pb-1">
               <span className={`text-[10px] font-bold tracking-normal opacity-40 transition-colors ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
                 ⚠️ <strong>Data Notice:</strong> Motion segmentation and metrics are estimations. Final map geometry and statistics may differ slightly from your native tracker due to GPS drift and algorithm smoothing.
