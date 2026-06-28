@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { UploadCloud, Info, X, Sun, Moon, Download, Camera, LogIn, LogOut, KeyRound, Calendar, MapPin, Trash2, Search, ArrowUpDown, BarChart3, Clock, Milestone, AlertTriangle } from 'lucide-react';
+import { UploadCloud, Info, X, Sun, Moon, Download, Camera, LogIn, LogOut, KeyRound, Calendar, MapPin, Trash2, Search, ArrowUpDown, BarChart3, Clock, Milestone, AlertTriangle, Mail } from 'lucide-react';
 
 import RunSummary from './components/RunSummary';
 import PerformanceStats from './components/PerformanceStats';
@@ -463,6 +463,102 @@ function App() {
       return 0;
     });
 
+  // --- UPGRADED CONTEXT RE-USABLE MODAL LAYOUT COMPONENT BLOCK ---
+  const authModalDialogMarkup = authModalOpen && (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-[5000] p-4 transition-all animate-fadeIn">
+      <div className={`max-w-md w-full rounded-2xl border p-6 shadow-2xl relative transition-all transform scale-100 ${
+        theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
+      }`}>
+        {/* Close Button Header Hook */}
+        <button 
+          onClick={() => { setAuthModalOpen(false); setAuthEmail(''); setAuthOTP(''); setAuthStep(1); setAuthError(null); }}
+          className={`absolute top-4 right-4 p-1.5 rounded-lg border transition-colors ${
+            theme === 'dark' ? 'border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800' : 'border-slate-100 text-slate-400 hover:text-slate-700 hover:bg-slate-50'
+          }`}
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        <div className="flex flex-col items-center text-center space-y-4">
+          <div className={`p-3 rounded-full ${theme === 'dark' ? 'bg-slate-950 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
+            <KeyRound className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-base font-black tracking-tight">Passwordless Authentication</h3>
+            <p className="text-xs text-slate-400 mt-0.5 leading-normal">🔒 Secure Blind Crypto-Signatures. We never save or track your direct email profile identities.</p>
+          </div>
+        </div>
+
+        {authStep === 1 ? (
+          <form onSubmit={handleRequestOTP} className="mt-6 space-y-4">
+            <div className="space-y-1">
+              <label className="text-[11px] font-black uppercase tracking-wider text-slate-400">Email Address</label>
+              <div className="relative flex items-center">
+                <Mail className="w-4 h-4 absolute left-3 text-slate-500" />
+                <input 
+                  type="email" 
+                  required
+                  placeholder="runner@example.com"
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  className={`w-full pl-9 pr-4 py-2.5 rounded-xl text-xs font-bold border outline-none transition-all focus:ring-1 focus:ring-blue-500 ${
+                    theme === 'dark' ? 'bg-slate-950 border-slate-800 focus:border-blue-500' : 'bg-slate-50 border-slate-200 focus:bg-white'
+                  }`}
+                />
+              </div>
+            </div>
+            <button 
+              type="submit" 
+              disabled={authLoading || !authEmail}
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-30 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all mt-2"
+            >
+              {authLoading ? "Issuing Secure Code..." : "Send Verification Code"}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleVerifyOTP} className="mt-6 space-y-4">
+            <div className="space-y-1">
+              <label className="text-[11px] font-black uppercase tracking-wider text-slate-400">6-Digit One-Time Password (OTP)</label>
+              <input 
+                type="text" 
+                required
+                maxLength={6}
+                placeholder="000000"
+                value={authOTP}
+                onChange={(e) => setAuthOTP(e.target.value.replace(/\D/g, ''))}
+                className={`w-full tracking-[0.5em] text-center py-2.5 rounded-xl text-sm font-black border outline-none transition-all focus:ring-1 focus:ring-blue-500 ${
+                  theme === 'dark' ? 'bg-slate-950 border-slate-800 focus:border-blue-500' : 'bg-slate-50 border-slate-200 focus:bg-white'
+                }`}
+              />
+            </div>
+            <button 
+              type="submit" 
+              disabled={authLoading || authOTP.length < 6}
+              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-30 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all mt-2"
+            >
+              {authLoading ? "Verifying Credentials..." : "Verify & Authenticate"}
+            </button>
+            <div className="text-center">
+              <button 
+                type="button" 
+                onClick={() => { setAuthStep(1); setAuthOTP(''); setAuthError(null); }}
+                className="text-[10px] text-slate-400 hover:text-blue-500 font-bold hover:underline"
+              >
+                ← Back to change email
+              </button>
+            </div>
+          </form>
+        )}
+
+        {authError && (
+          <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-xs font-bold text-center leading-normal">
+            ⚠️ {authError}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   if (!data) {
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center p-6 md:p-12 transition-colors duration-200 relative ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
@@ -494,7 +590,6 @@ function App() {
           <p className={`text-xs font-bold uppercase tracking-widest ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>Interactive Workout Analytics Workspace</p>
         </header>
 
-        {/* EXPLICIT GRACEFUL SESSION EXPIRATION INTERCEPTOR BANNER */}
         {sessionExpired && (
           <div className="w-full max-w-xl mb-6 p-4 rounded-xl border flex items-center space-x-3 bg-red-500/10 border-red-500/20 text-red-500 text-xs font-bold shadow-sm">
             <AlertTriangle className="w-5 h-5 flex-shrink-0 animate-bounce" />
@@ -741,6 +836,9 @@ function App() {
             </div>
           </div>
         )}
+
+        {/* Injected landing overlay wrapper node */}
+        {authModalDialogMarkup}
       </div>
     );
   }
@@ -818,6 +916,8 @@ function App() {
          </div>
       </div>
 
+      {/* Embedded active dashboard fallback overlay */}
+      {authModalDialogMarkup}
     </div>
   );
 }
