@@ -23,17 +23,20 @@ NS = {
     "ax": "http://www.garmin.com/xmlschemas/ActivityExtension/v2",
 }
 
+# =====================================================================
+# TUNED CONSTANTS BLOCK (Lines 30-35)
+# =====================================================================
 TIME_FMT = "%Y-%m-%d %H:%M:%S"
 MOVING_SPEED_THRESH = 0.8
 STOP_SPEED_THRESH = 0.8
 WALK_CADENCE_MAX = 140
 WALK_SPEED_MAX = 2
 DISPLAY_DECIMALS = 2
-# Change from 5.0 down to 2.5 to restore spiky, organic sensor telemetry metrics
-SMOOTHWINDOW = 2.5 
-MIN_SEGMENT_TIME_S = 5.0     # seconds: below this is considered tiny
-MIN_SEGMENT_DIST_M = 5.0     # meters: below this is considered tiny
+SMOOTHWINDOW = 2.5           # Tightened window to capture crisp sensor texturing
+MIN_SEGMENT_TIME_S = 2.0     # Lowered from 5.0 to protect short walk intervals
+MIN_SEGMENT_DIST_M = 2.0     # Lowered from 5.0 to protect short walk intervals
 CADENCE_MULTIPLE = 2
+
 ENRICH_SEGMENTS_TOLERANCE= "30s"#"15s"
 TF = TimezoneFinder()
 DEFAULT_TIMEZONE = "UTC"
@@ -577,7 +580,14 @@ def _initial_motion_segments(work: pd.DataFrame) -> pd.DataFrame:
         )
     return pd.DataFrame(records)
 
-def summarize_motion_segments(df: pd.DataFrame, smoothing_window: int = 5) -> pd.DataFrame:
+# =====================================================================
+# FULL UPDATED FUNCTION: summarize_motion_segments
+# =====================================================================
+def summarize_motion_segments(df: pd.DataFrame, smoothing_window: int = 3) -> pd.DataFrame:
+    """
+    Summarize raw time series points into distinct intervals.
+    Default window size reduced to 3 rows to avoid drowning out micro walk breaks.
+    """
     work = df.copy().sort_values("time").reset_index(drop=True)
 
     speed_smooth = pd.to_numeric(work.get("speed_smooth_m_s"), errors="coerce")
@@ -600,9 +610,7 @@ def summarize_motion_segments(df: pd.DataFrame, smoothing_window: int = 5) -> pd
 
     initial = _initial_motion_segments(work)
     
-    # Initialize the fast numpy calculator
     calc = SegmentStatsCalculator(work)
-    # The merge function now returns a fully computed list of dictionaries
     final_records = _merge_tiny_segments(calc, initial)
 
     out = pd.DataFrame(final_records)
@@ -636,16 +644,21 @@ def first_valid(series: pd.Series):
     return s.iloc[0] if not s.empty else None
 
 
+# =====================================================================
+# FULL UPDATED FUNCTION: collapse_run_streams_for_map
+# =====================================================================
 def collapse_run_streams_for_map(df: pd.DataFrame, tz_name=DEFAULT_TIMEZONE) -> pd.DataFrame:
     """
     Prepare the final collapsed run data for map output using vectorized aggregation.
+    Explicitly whitelists and re-calculates high-fidelity pace vectors for chart delivery.
     """
     df = df.copy()
     df["time"] = utc_to_local_string(df["time"], tz_name=tz_name)
     
     numeric_cols = [
         "latitude", "longitude", "altitude_m", "distance_m",
-        "heart_rate_bpm", "cadence", "speed_m_s", "run_cadence", "watts"
+        "heart_rate_bpm", "cadence", "speed_m_s", "run_cadence", "watts",
+        "speed_smooth_m_s"  # Whitelisted high-res smoothing speed
     ]
     for col in numeric_cols:
         if col in df.columns:
@@ -662,8 +675,8 @@ def collapse_run_streams_for_map(df: pd.DataFrame, tz_name=DEFAULT_TIMEZONE) -> 
         if col in df.columns:
             agg_rules[col] = "first"
             
-    # Metrics: take the mean
-    mean_cols = ["heart_rate_bpm", "cadence", "speed_m_s", "run_cadence", "watts"]
+    # Metrics: take the mean per second slice
+    mean_cols = ["heart_rate_bpm", "cadence", "speed_m_s", "run_cadence", "watts", "speed_smooth_m_s"]
     for col in mean_cols:
         if col in df.columns:
             agg_rules[col] = "mean"
@@ -679,6 +692,12 @@ def collapse_run_streams_for_map(df: pd.DataFrame, tz_name=DEFAULT_TIMEZONE) -> 
         out["cadence"] = out["cadence"].fillna(out["run_cadence"])
     elif "cadence" not in out.columns and "run_cadence" in out.columns:
         out["cadence"] = out["run_cadence"]
+        
+    # CRITICAL FIX: Dynamically generate pace vectors for every single map trackpoint row
+    if "speed_smooth_m_s" in out.columns:
+        out["pace_min_per_km"] = pace_from_speed(out["speed_smooth_m_s"])
+    elif "speed_m_s" in out.columns:
+        out["pace_min_per_km"] = pace_from_speed(out["speed_m_s"])
         
     return out
 
