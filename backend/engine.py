@@ -314,48 +314,68 @@ def add_deltas(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def add_smoothed_speed(df: pd.DataFrame, window_s: float = SMOOTHWINDOW) -> pd.DataFrame:
+def add_smoothed_speed(df: pd.DataFrame, window_s: float = 5.0) -> pd.DataFrame:
     """
-    Applies a tight moving-average filter across tracking coordinate sequences.
-    Dialed down to preserve crisp micro-variations for high-fidelity runner analysis.
+    Smooths speed metrics across a time-duration window.
+    Calculates velocity accurately by dividing actual distance changes by the real 
+    elapsed time across the rolling period to handle both high-res TCX and sparse Strava streams.
     """
     df = df.copy()
     if "distance_m" not in df.columns:
         return df
 
-    df_ts = df[["time", "distance_m"]].dropna(subset=["time", "distance_m"]).copy()
-    df_ts["time"] = pd.to_datetime(df_ts["time"], errors="coerce")
-    df_ts["distance_m"] = pd.to_numeric(df_ts["distance_m"], errors="coerce")
-    df_ts = df_ts.dropna(subset=["time", "distance_m"]).set_index("time").sort_index()
+    # Enforce clear datetime processing structures
+    df['time'] = pd.to_datetime(df['time'], errors='coerce')
+    
+    # 1. Establish a fallback raw speed baseline column if missing
+    if "speed_m_s" not in df.columns or df["speed_m_s"].isna().all():
+        time_delta = df["time"].diff().dt.total_seconds().fillna(0.0)
+        dist_delta = df["distance_m"].diff().fillna(0.0)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            df["speed_m_s"] = (dist_delta / time_delta.replace(0, np.nan)).fillna(0.0)
+    else:
+        df["speed_m_s"] = pd.to_numeric(df["speed_m_s"], errors="coerce").fillna(0.0)
 
+    # 2. Isolate time series points to compute an accurate rolling delta matrix
+    df_ts = df[["time", "distance_m"]].dropna(subset=["time", "distance_m"]).copy()
+    df_ts = df_ts.set_index("time").sort_index()
+    
     if df_ts.empty:
-        if "speed_m_s" in df.columns:
-            df["speed_smooth_m_s"] = pd.to_numeric(df["speed_m_s"], errors="coerce").fillna(0.0)
-        else:
-            df["speed_smooth_m_s"] = 0.0
+        df["speed_smooth_m_s"] = df["speed_m_s"]
         return df
 
-    # Rolling calculation bound to the tuned window configurations
-    dist_roll = df_ts["distance_m"].rolling(f"{int(window_s)}s", min_periods=2).apply(
-        lambda x: x.iloc[-1] - x.iloc[0],
-        raw=False,
-    )
-
-    df["time"] = pd.to_datetime(df["time"], errors="coerce")
-    df = df.merge(dist_roll.rename("dist_rolling"), left_on="time", right_index=True, how="left")
-
-    if "dist_rolling" not in df.columns:
-        df["dist_rolling"] = np.nan
-
-    df["speed_smooth_m_s"] = df["dist_rolling"] / window_s
-
-    if "speed_m_s" in df.columns:
-        df["speed_smooth_m_s"] = df["speed_smooth_m_s"].fillna(
-            pd.to_numeric(df["speed_m_s"], errors="coerce")
-        )
-    else:
-        df["speed_smooth_m_s"] = df["speed_smooth_m_s"].fillna(0.0)
-
+    # Adapt the window lookback duration based on stream source density
+    # A 15-second lookback window safely filters GPS jitter without flattening athletic performance textures
+    window_duration = max(5, int(window_s * 3))
+    window_str = f"{window_duration}s"
+    
+    # Extract true distance values at the start and end of the lookback window
+    dist_start = df_ts["distance_m"].rolling(window_str, min_periods=1).apply(lambda x: x.iloc[0], raw=False)
+    dist_end = df_ts["distance_m"].rolling(window_str, min_periods=1).apply(lambda x: x.iloc[-1], raw=False)
+    
+    # Extract true epoch timestamps at the start and end of the lookback window
+    time_series = pd.Series(df_ts.index, index=df_ts.index)
+    time_start = time_series.rolling(window_str, min_periods=1).apply(lambda x: x.iloc[0].timestamp(), raw=False)
+    time_end = time_series.rolling(window_str, min_periods=1).apply(lambda x: x.iloc[-1].timestamp(), raw=False)
+    
+    # Calculate true deltas across the lookback window
+    delta_dist = dist_end - dist_start
+    delta_time = time_end - time_start
+    
+    # Divide true distance changes by true elapsed time to get accurate velocity metrics
+    with np.errstate(divide="ignore", invalid="ignore"):
+        computed_smooth_speed = (delta_dist / delta_time.replace(0, np.nan)).fillna(df_ts["distance_m"].diff().fillna(0.0))
+        
+    # Merge the computed values back into the primary activity DataFrame
+    df = df.merge(computed_smooth_speed.rename("speed_smooth_computed"), left_on="time", right_index=True, how="left")
+    df["speed_smooth_m_s"] = df["speed_smooth_computed"].fillna(df["speed_m_s"])
+    
+    # Prevent negative speed artifacts from entering the dataset
+    df["speed_smooth_m_s"] = df["speed_smooth_m_s"].apply(lambda x: max(0.0, x) if pd.notna(x) else 0.0)
+    
+    if "speed_smooth_computed" in df.columns:
+        df.drop(columns=["speed_smooth_computed"], inplace=True)
+        
     return df
 
 class SegmentStatsCalculator:
