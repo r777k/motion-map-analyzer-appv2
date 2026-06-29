@@ -362,14 +362,16 @@ def add_smoothed_speed(df: pd.DataFrame, window_s: float = SMOOTHWINDOW) -> pd.D
     avg_native_gap = df["_time_diff"].size / max(1, df_native.index.size)
     
     if avg_native_gap < 1.5:
-        # High Density Stream (TCX 1-second tracking loops)
+        # High Density Stream (TCX 1-second tracking loops or pre-padded Strava series)
         # We increase the target window slightly to smooth out high-frequency noise
         smoothing_window = max(4, int(window_s + 2))
-        df_native["_smoothed_speed"] = df_native["_native_speed"].rolling(
+        
+        # FIX: Call rolling on the DataFrame instance to allow the 'on' parameter to resolve correctly
+        df_native["_smoothed_speed"] = df_native.rolling(
             window=f"{smoothing_window}s", on="time", min_periods=1
-        ).mean()
+        )["_native_speed"].mean()
     else:
-        # Sparse/Sampled Stream (Strava API 4-12 second jumps)
+        # Sparse/Sampled Stream (Strava API raw 4-12 second jumps)
         # We use a responsive exponential window over real points to retain true organic changes
         df_native["_smoothed_speed"] = df_native["_native_speed"].ewm(span=3, min_periods=1).mean()
 
