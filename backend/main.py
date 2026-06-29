@@ -426,6 +426,9 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     run_df = add_deltas(run_df)
     run_df = add_smoothed_speed(run_df)
 
+    # ------------------------------------------------------------------------------
+    # RE-INJECTION TUNNEL PASSTHROUGH (HYBRID DENSITY PACE VARIATION TUNING)
+    # ------------------------------------------------------------------------------
     if len(velocity_data) > 0:
         vel_map = pd.DataFrame({
             "time": [(base_start_time + timedelta(seconds=t)).strftime("%Y-%m-%d %H:%M:%S") for t in time_data],
@@ -435,13 +438,21 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
         
         run_df = pd.merge(run_df, vel_map, on="time", how="left")
         
-        run_df["speed_m_s"] = run_df["true_speed"].fillna(run_df["speed_m_s"])
-        run_df["speed_smooth_m_s"] = run_df["true_speed"].fillna(run_df["speed_smooth_m_s"])
+        # Guard against zero-division or null rows
+        run_df["true_speed"] = run_df["true_speed"].fillna(run_df["speed_m_s"])
         
-        run_df["pace_min_per_km"] = 1000.0 / (60.0 * run_df["speed_smooth_m_s"])
+        # Blending Mix: 70% our high-res adaptive speed delta + 30% Strava baseline speed.
+        # This brings back the organic high-res variations without losing overall tracking alignment.
+        run_df["speed_smooth_m_s"] = (run_df["speed_smooth_m_s"] * 0.70) + (run_df["true_speed"] * 0.30)
+        run_df["speed_m_s"] = run_df["speed_smooth_m_s"]
+        
+        # Recalculate granular pace string fields directly from our hybrid speed mix
+        with np.errstate(divide="ignore", invalid="ignore"):
+            run_df["pace_min_per_km"] = 1000.0 / (60.0 * run_df["speed_smooth_m_s"])
         run_df["pace_min_per_km"] = run_df["pace_min_per_km"].replace([float('inf'), float('-inf')], None)
         
         run_df = run_df.drop(columns=["true_speed"])
+    # ------------------------------------------------------------------------------
 
     first_row_time = run_df["time"].min()
     orig_start_str = first_row_time.strftime("%Y-%m-%d %H:%M:%S") if pd.notna(first_row_time) else "Unknown"
