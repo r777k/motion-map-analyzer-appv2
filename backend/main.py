@@ -516,6 +516,73 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     return JSONResponse(content=clean_nans(raw_payload))
 
 # ----------------------------------------------------------------------------------
+# PASSWORDLESS AUTHENTICATION ROUTERS
+# ----------------------------------------------------------------------------------
+@app.post("/api/auth/send-otp")
+async def send_otp(payload: EmailAuthRequest):
+    clear_email = payload.email.strip().lower()
+    hashed_email = blind_hash_string(clear_email)
+    
+    otp_code = str(random.randint(100000, 999999))
+    hashed_code = blind_hash_string(otp_code)
+    expiry_timestamp = datetime.now(timezone.utc) + timedelta(minutes=10)
+    
+    try:
+        with get_db_cursor() as cur:
+            cur.execute(
+                "INSERT INTO auth_codes (hashed_email, hashed_code, expires_at) VALUES (%s, %s, %s);",
+                (hashed_email, hashed_code, expiry_timestamp)
+            )
+            
+        async with httpx.AsyncClient() as client:
+            resend_payload = {
+                "from": "MotionMap <onboarding@resend.dev>",
+                "to": [clear_email],
+                "subject": "Your MotionMap Verification Code",
+                "html": f"""
+                    <div style='font-family:sans-serif; padding:24px; max-width:450px; border:1px solid #e2e8f0; border-radius:12px;'>
+                        <h2 style='color:#2563eb; margin-top:0;'>👟 MotionMap Security</h2>
+                        <p style='color:#475569; font-size:14px;'>Use the token code below to access your workout logs:</p>
+                        <div style='background:#f1f5f9; padding:16px; text-align:center; border-radius:8px; font-size:32px; font-weight:900; letter-spacing:4px; color:#1e293b; margin:20px 0;'>
+                            {otp_code}
+                        </div>
+                        <p style='color:#94a3b8; font-size:11px; margin-bottom:0;'>This security window expires automatically in 10 minutes.</p>
+                    </div>
+                """
+            }
+            response = await client.post("https://api.resend.com/emails", json=resend_payload, headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"})
+            if response.status_code >= 400:
+                raise HTTPException(status_code=502, detail="Mailing service provider rejected dispatch rules.")
+        return {"status": "success", "detail": "Verification token transmitted successfully."}
+    except Exception as e:
+        if isinstance(e, HTTPException): raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/auth/verify-otp")
+async def verify_otp(payload: VerifyOTPRequest):
+    hashed_email = blind_hash_string(payload.email)
+    hashed_code = blind_hash_string(payload.code)
+    now = datetime.now(timezone.utc)
+    
+    with get_db_cursor() as cur:
+        cur.execute("SELECT id FROM auth_codes WHERE hashed_email = %s AND hashed_code = %s AND expires_at > %s ORDER BY created_at DESC LIMIT 1;", (hashed_email, hashed_code, now))
+        code_record = cur.fetchone()
+        if not code_record:
+            raise HTTPException(status_code=401, detail="Invalid or expired verification token code.")
+            
+        cur.execute("DELETE FROM auth_codes WHERE hashed_email = %s;", (hashed_email,))
+        cur.execute("SELECT id FROM users WHERE hashed_email = %s;", (hashed_email,))
+        user_record = cur.fetchone()
+        
+        if user_record:
+            user_id = user_record[0]
+        else:
+            cur.execute("INSERT INTO users (hashed_email) VALUES (%s) RETURNING id;", (hashed_email,))
+            user_id = cur.fetchone()[0]
+            
+    access_jwt = jwt.encode({"user_id": str(user_id), "exp": datetime.now(timezone.utc) + timedelta(days=7)}, JWT_SECRET_KEY, algorithm=ALGORITHM)
+    return {"access_token": access_jwt, "token_type": "bearer"}
+# ----------------------------------------------------------------------------------
 # STATELESS WORKSPACE PARSING ROUTINE (UPGRADED CRISP NON-ARTIFICIAL SMOOTHING)
 # ----------------------------------------------------------------------------------
 @app.post("/api/analyze")
