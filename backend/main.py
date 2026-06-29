@@ -428,7 +428,7 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     run_df = add_deltas(run_df)
     
     # CRITICAL: Route to the dedicated Strava velocity engine to preserve TCX isolation
-    run_df = add_smoothed_speed_strava(run_df, window_s=SMOOTHWINDOW)
+    run_df = add_smoothed_speed_strava(run_df, window_s=4.0)
 
     # ------------------------------------------------------------------------------
     # RE-INJECTION TUNNEL PASSTHROUGH (HYBRID DENSITY PACE VARIATION TUNING)
