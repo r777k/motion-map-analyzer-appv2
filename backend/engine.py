@@ -401,6 +401,56 @@ def add_smoothed_speed(df: pd.DataFrame, window_s: float = SMOOTHWINDOW) -> pd.D
 
     return df
 
+def add_smoothed_speed_strava(df: pd.DataFrame, window_s: float = 4.0) -> pd.DataFrame:
+    """
+    Dedicated high-fidelity velocity engine for Strava API streams.
+    Calculates instant speed metrics directly from raw GPS coordinate changes 
+    to recover organic variations lost in Strava's pre-smoothed server logs.
+    """
+    df = df.copy()
+    if df.empty:
+        return df
+
+    # Enforce strict datatypes and ensure chronological ordering
+    df['time'] = pd.to_datetime(df['time'], errors='coerce')
+    df = df.sort_values("time").reset_index(drop=True)
+
+    # 1. Calculate the true great-circle distance covered using raw coordinate pairs
+    lat_deg = pd.to_numeric(df["latitude"], errors="coerce")
+    lon_deg = pd.to_numeric(df["longitude"], errors="coerce")
+    
+    if lat_deg.notna().sum() > 1 and lon_deg.notna().sum() > 1:
+        lat = np.radians(lat_deg)
+        lon = np.radians(lon_deg)
+        dlat = lat.diff()
+        dlon = lon.diff()
+        R = 6371000.0 # Earth's radius in meters
+        a = np.sin(dlat / 2) ** 2 + np.cos(lat).shift(1) * np.cos(lat) * np.sin(dlon / 2) ** 2
+        c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+        coord_dist_delta = R * c
+        coord_dist_delta.iloc[0] = 0.0
+    else:
+        coord_dist_delta = df["distance_m"].diff().fillna(0.0)
+
+    time_delta_s = df["time"].diff().dt.total_seconds().fillna(0.0)
+
+    # 2. Compute instant velocity from coordinates
+    with np.errstate(divide="ignore", invalid="ignore"):
+        raw_coord_speed = (coord_dist_delta / time_delta_s.replace(0, np.nan)).fillna(0.0)
+
+    # 3. Apply a short rolling window to filter out extreme GPS coordinate jitter
+    df["_coord_speed_smooth"] = raw_coord_speed.rolling(window=3, min_periods=1).mean()
+    
+    # 4. Apply an exponential moving average to build a natural pace profile
+    df["speed_smooth_m_s"] = df["_coord_speed_smooth"].ewm(span=5, min_periods=1).mean()
+    
+    # Final boundary cleanup passes
+    df["speed_smooth_m_s"] = df["speed_smooth_m_s"].clip(lower=0.0).fillna(0.0)
+    if "_coord_speed_smooth" in df.columns:
+        df.drop(columns=["_coord_speed_smooth"], inplace=True)
+        
+    return df
+
 class SegmentStatsCalculator:
     """Pre-computes numpy arrays and cumulative sums to make segment slice math O(1)."""
     def __init__(self, work: pd.DataFrame):

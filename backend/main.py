@@ -28,7 +28,8 @@ from database import get_db_cursor, blind_hash_string
 
 # Import core engine parsing functions
 from engine import (
-    parse_tcx_to_rows, parse_fit_to_rows, prepare_run_df, add_deltas, add_smoothed_speed,
+    parse_tcx_to_rows, parse_fit_to_rows, prepare_run_df, add_deltas,
+    add_smoothed_speed,add_smoothed_speed_strava,
     summarize_motion_segments, prepare_for_csv, infer_activity_timezone_name,
     compute_performance_stats, collapse_run_streams_for_map, build_lookup,
     enrich_segments, build_segments_payload, compute_metric_stats,
@@ -425,7 +426,9 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     # ------------------------------------------------------------------------------
 
     run_df = add_deltas(run_df)
-    run_df = add_smoothed_speed(run_df)
+    
+    # CRITICAL: Route to the dedicated Strava velocity engine to preserve TCX isolation
+    run_df = add_smoothed_speed_strava(run_df, window_s=SMOOTHWINDOW)
 
     # ------------------------------------------------------------------------------
     # RE-INJECTION TUNNEL PASSTHROUGH (HYBRID DENSITY PACE VARIATION TUNING)
@@ -438,16 +441,12 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
         vel_map["time"] = pd.to_datetime(vel_map["time"])
         
         run_df = pd.merge(run_df, vel_map, on="time", how="left")
-        
-        # Guard against zero-division or null rows
         run_df["true_speed"] = run_df["true_speed"].fillna(run_df["speed_m_s"])
         
-        # Blending Mix: 70% our high-res adaptive speed delta + 30% Strava baseline speed.
-        # This brings back the organic high-res variations without losing overall tracking alignment.
-        run_df["speed_smooth_m_s"] = (run_df["speed_smooth_m_s"] * 0.70) + (run_df["true_speed"] * 0.30)
+        # Blend Pass: Combine our high-res coordinate speed with Strava's velocity_smooth baseline
+        run_df["speed_smooth_m_s"] = (run_df["speed_smooth_m_s"] * 0.65) + (run_df["true_speed"] * 0.35)
         run_df["speed_m_s"] = run_df["speed_smooth_m_s"]
         
-        # Recalculate granular pace string fields directly from our hybrid speed mix
         with np.errstate(divide="ignore", invalid="ignore"):
             run_df["pace_min_per_km"] = 1000.0 / (60.0 * run_df["speed_smooth_m_s"])
         run_df["pace_min_per_km"] = run_df["pace_min_per_km"].replace([float('inf'), float('-inf')], None)
@@ -466,15 +465,12 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
 
     perfstats = compute_performance_stats(run_df, tz_name=tz_name)
     
+    # Execute the backend map compression pass
     run_df_collapsed = collapse_run_streams_for_map(run_df, tz_name=tz_name)
     
-    p_map = run_df[["time", "pace_min_per_km", "speed_smooth_m_s"]].copy()
-    p_map["time"] = utc_to_local_string(p_map["time"], tz_name=tz_name)
-    p_map = p_map.groupby("time", as_index=False).mean()
-    p_map["time"] = p_map["time"].astype(str)
-    
+    # FIXED: The previous manual merge block has been removed to prevent column naming collisions 
+    # and restore high-resolution pace charts for Strava data.
     run_df_collapsed["time"] = run_df_collapsed["time"].astype(str)
-    run_df_collapsed = pd.merge(run_df_collapsed, p_map, on="time", how="left")
 
     lookup = build_lookup(run_df_collapsed)
 
