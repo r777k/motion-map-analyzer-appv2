@@ -12,6 +12,7 @@ import math
 import random
 import httpx
 import pandas as pd
+import numpy as np
 from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, HTTPException, Response, Security, Depends, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
