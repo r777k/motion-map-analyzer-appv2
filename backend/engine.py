@@ -32,9 +32,9 @@ STOP_SPEED_THRESH = 0.8
 WALK_CADENCE_MAX = 140
 WALK_SPEED_MAX = 2
 DISPLAY_DECIMALS = 2
-SMOOTHWINDOW = 7 # 2.5           # Tightened window to capture crisp sensor texturing
-MIN_SEGMENT_TIME_S = 7 # 2.0     # Lowered from 5.0 to protect short walk intervals
-MIN_SEGMENT_DIST_M = 5 # 2.0     # Lowered from 5.0 to protect short walk intervals
+SMOOTHWINDOW = 4 # 2.5           # Tightened window to capture crisp sensor texturing
+MIN_SEGMENT_TIME_S = 3 # 2.0     # Lowered from 5.0 to protect short walk intervals
+MIN_SEGMENT_DIST_M = 4 # 2.0     # Lowered from 5.0 to protect short walk intervals
 CADENCE_MULTIPLE = 2
 
 ENRICH_SEGMENTS_TOLERANCE= "30s"#"15s"
@@ -316,66 +316,78 @@ def add_deltas(df: pd.DataFrame) -> pd.DataFrame:
 
 def add_smoothed_speed(df: pd.DataFrame, window_s: float = SMOOTHWINDOW) -> pd.DataFrame:
     """
-    Smooths speed metrics across a time-duration window.
-    Leverages pd.merge_asof for a high-performance, vectorized lookback 
-    calculation that handles both high-res TCX and sparse Strava streams without crashing.
+    Density-adaptive speed smoothing algorithm.
+    - For high-density streams (TCX), applies an expanded rolling window to filter out jitter.
+    - For sparse/sampled streams (Strava), isolates rows with genuine tracking updates,
+      computes true interval velocities, and interpolates them to restore organic variations.
     """
     df = df.copy()
     if "distance_m" not in df.columns or df.empty:
         return df
 
-    # Enforce clean datetime and numeric processing structures
+    # Enforce precise data types and ensure chronological ordering
     df['time'] = pd.to_datetime(df['time'], errors='coerce')
     df['distance_m'] = pd.to_numeric(df['distance_m'], errors='coerce')
-    
-    # Guarantee chronological order for merge_asof alignment
     df = df.sort_values("time").reset_index(drop=True)
-    
-    # 1. Establish a solid raw speed baseline column if missing
-    if "speed_m_s" not in df.columns or df["speed_m_s"].isna().all():
-        time_delta = df["time"].diff().dt.total_seconds().fillna(0.0)
-        dist_delta = df["distance_m"].diff().fillna(0.0)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            df["speed_m_s"] = (dist_delta / time_delta.replace(0, np.nan)).fillna(0.0)
-    else:
-        df["speed_m_s"] = pd.to_numeric(df["speed_m_s"], errors="coerce").fillna(0.0)
 
-    # 2. Derive dynamic lookback timestamps per row (e.g., exactly N seconds ago)
-    window_duration = max(2.0, window_s)
-    df["_lookback_time"] = df["time"] - pd.to_timedelta(window_duration, unit="s")
-    
-    # 3. Create a clean history dataframe for lookback matching
-    df_ref = df[["time", "distance_m"]].dropna(subset=["time", "distance_m"]).copy()
-    df_ref = df_ref.rename(columns={"distance_m": "_past_distance_m", "time": "_past_time"})
-    
-    # 4. Execute a fast, vectorized backward-merge to align current rows with past states
-    merged = pd.merge_asof(
-        df,
-        df_ref,
-        left_on="_lookback_time",
-        right_on="_past_time",
-        direction="backward"
-    )
-    
-    # 5. Calculate true durations and distance deltas between current and matched past rows
-    true_time_delta_s = (merged["time"] - merged["_past_time"]).dt.total_seconds()
-    true_dist_delta_m = merged["distance_m"] - merged["_past_distance_m"]
-    
-    # 6. Compute accurate velocity values
+    # 1. Calculate raw second-by-second deltas
+    df["_time_diff"] = df["time"].diff().dt.total_seconds().fillna(0.0)
+    df["_dist_diff"] = df["distance_m"].diff().fillna(0.0)
+
+    # 2. Isolate genuine tracking updates (where distance actually increments)
+    # This strips away the static intermediate rows introduced during up-sampling
+    df_native = df[df["_dist_diff"] > 0.0].copy()
+
+    if df_native.empty:
+        if "speed_m_s" in df.columns:
+            df["speed_smooth_m_s"] = pd.to_numeric(df["speed_m_s"], errors="coerce").fillna(0.0).clip(lower=0.0)
+        else:
+            df["speed_smooth_m_s"] = 0.0
+        df.drop(columns=["_time_diff", "_dist_diff"], errors="ignore", inplace=True)
+        return df
+
+    # Compute the real-world interval velocity across genuine coordinate updates
+    df_native["_elapsed_seconds"] = df_native["time"].diff().dt.total_seconds()
+    df_native["_moved_meters"] = df_native["distance_m"].diff()
+
+    # Fall back to localized row deltas for the first data point
+    df_native["_elapsed_seconds"] = df_native["_elapsed_seconds"].fillna(df_native["_time_diff"])
+    df_native["_moved_meters"] = df_native["_moved_meters"].fillna(df_native["_dist_diff"])
+
     with np.errstate(divide="ignore", invalid="ignore"):
-        merged["speed_smooth_m_s"] = true_dist_delta_m / true_time_delta_s.replace(0, np.nan)
-        
-    # 7. Apply a fallback to raw speed for the initial rows where no lookback row exists
-    merged["speed_smooth_m_s"] = merged["speed_smooth_m_s"].fillna(merged["speed_m_s"])
+        df_native["_native_speed"] = (df_native["_moved_meters"] / df_native["_elapsed_seconds"].replace(0, np.nan)).fillna(0.0)
+
+    # 3. Apply a density-tuned smoothing window
+    # Compute stream density: average elapsed seconds between real updates
+    avg_native_gap = df["_time_diff"].size / max(1, df_native.index.size)
     
-    # 8. Clean up negative artifacts and clip lower bounds to zero
-    merged["speed_smooth_m_s"] = merged["speed_smooth_m_s"].clip(lower=0.0).fillna(0.0)
-    
-    # Drop intermediate processing flags
-    cols_to_remove = ["_lookback_time", "_past_time", "_past_distance_m"]
-    merged.drop(columns=[c for c in cols_to_remove if c in merged.columns], errors="ignore", inplace=True)
-    
-    return merged
+    if avg_native_gap < 1.5:
+        # High Density Stream (TCX 1-second tracking loops)
+        # We increase the target window slightly to smooth out high-frequency noise
+        smoothing_window = max(4, int(window_s + 2))
+        df_native["_smoothed_speed"] = df_native["_native_speed"].rolling(
+            window=f"{smoothing_window}s", on="time", min_periods=1
+        ).mean()
+    else:
+        # Sparse/Sampled Stream (Strava API 4-12 second jumps)
+        # We use a responsive exponential window over real points to retain true organic changes
+        df_native["_smoothed_speed"] = df_native["_native_speed"].ewm(span=3, min_periods=1).mean()
+
+    # 4. Map the smoothed speed values back into the primary 1-second tracking dataset
+    df = df.merge(df_native[["time", "_smoothed_speed"]], on="time", how="left")
+
+    # Linear interpolation smoothly fills the gaps between sparse data points,
+    # restoring realistic pace variations on the frontend chart
+    df["speed_smooth_m_s"] = df["_smoothed_speed"].interpolate(method="linear").bfill().ffill()
+
+    # Final boundary cleanup passes
+    df["speed_smooth_m_s"] = df["speed_smooth_m_s"].clip(lower=0.0).fillna(0.0)
+
+    # Remove temporary calculation columns
+    cols_to_drop = ["_time_diff", "_dist_diff", "_smoothed_speed"]
+    df.drop(columns=[c for c in cols_to_drop if c in df.columns], errors="ignore", inplace=True)
+
+    return df
 
 class SegmentStatsCalculator:
     """Pre-computes numpy arrays and cumulative sums to make segment slice math O(1)."""
