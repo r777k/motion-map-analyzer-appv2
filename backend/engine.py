@@ -33,8 +33,8 @@ WALK_CADENCE_MAX = 140
 WALK_SPEED_MAX = 2
 DISPLAY_DECIMALS = 2
 SMOOTHWINDOW = 5 # 2.5           # Tightened window to capture crisp sensor texturing
-MIN_SEGMENT_TIME_S = 2.0     # Lowered from 5.0 to protect short walk intervals
-MIN_SEGMENT_DIST_M = 2.0     # Lowered from 5.0 to protect short walk intervals
+MIN_SEGMENT_TIME_S = 5 # 2.0     # Lowered from 5.0 to protect short walk intervals
+MIN_SEGMENT_DIST_M = 3 # 2.0     # Lowered from 5.0 to protect short walk intervals
 CADENCE_MULTIPLE = 2
 
 ENRICH_SEGMENTS_TOLERANCE= "30s"#"15s"
