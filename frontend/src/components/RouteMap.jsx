@@ -1,4 +1,4 @@
-import { MapContainer, TileLayer, Polyline, CircleMarker, Tooltip, useMap, useMapEvents, Marker } from 'react-leaflet';
+import { MapContainer, TileLayer, Polyline, CircleMarker, Tooltip, useMap, useMapEvents, Marker, ZoomControl } from 'react-leaflet';
 import { useEffect, useMemo, useState } from 'react';
 import * as d3Scale from 'd3-scale';
 import * as d3Chromatic from 'd3-scale-chromatic';
@@ -33,21 +33,21 @@ const STATE_COLORS = {
 
 const THICKNESS_MODES = {
   thin: {
-    weights: { standard: 2.0, standardActive: 4.0, standardDimmed: 0.8, overlay: 2.5, overlayActive: 4.5, overlayDimmed: 1.0 },
+    weights: { standard: 2.0, standardActive: 4.0, standardDimmed: 0.8, overlay: 2.0, overlayActive: 4.0, overlayDimmed: 0.8 },
     arrowSize: 11,
     arrowStroke: 1.5,
     fontSize: '9px',
     markerRadius: 3
   },
   medium: {
-    weights: { standard: 3.5, standardActive: 5.5, standardDimmed: 1.5, overlay: 4.5, overlayActive: 6.5, overlayDimmed: 2.0 },
+    weights: { standard: 3.5, standardActive: 5.5, standardDimmed: 1.5, overlay: 4.5, overlayActive: 6.5, overlayDimmed: 1.5 },
     arrowSize: 15,
     arrowStroke: 2.5,
     fontSize: '11px',
     markerRadius: 4
   },
   thick: {
-    weights: { standard: 5.5, standardActive: 7.5, standardDimmed: 2.2, overlay: 6.5, overlayActive: 8.5, overlayDimmed: 3.0 },
+    weights: { standard: 5.5, standardActive: 7.5, standardDimmed: 2.2, overlay: 6.5, overlayActive: 8.5, overlayDimmed: 2.0 },
     arrowSize: 19,
     arrowStroke: 3.5,
     fontSize: '13px',
@@ -59,18 +59,14 @@ const REF_ZOOM = 14;
 
 const getZoomWeight = (baseWeight, currentZoom) => {
   if (currentZoom >= REF_ZOOM) return baseWeight; 
-  const factor = currentZoom / REF_ZOOM;
-  return Math.max(1.0, baseWeight * factor);       
+  return Math.max(1.0, baseWeight * (currentZoom / REF_ZOOM));       
 };
 
 const getPercentile = (data, p) => {
   if (!data || data.length === 0) return 0;
   const sorted = [...data].sort((a, b) => a - b);
   const index = (sorted.length - 1) * p;
-  const lower = Math.floor(index);
-  const upper = Math.ceil(index);
-  const weight = index % 1;
-  return sorted[lower] * (1 - weight) + sorted[upper] * weight;
+  return sorted[Math.floor(index)] * (1 - (index % 1)) + sorted[Math.ceil(index)] * (index % 1);
 };
 
 const formatTimeHHMMSS = (totalSeconds) => {
@@ -84,61 +80,60 @@ const calculateBearing = (lat1, lon1, lat2, lon2) => {
   const dLon = (lon2 - lon1) * (Math.PI / 180);
   const lat1Rad = lat1 * (Math.PI / 180);
   const lat2Rad = lat2 * (Math.PI / 180);
-  const y = Math.sin(dLon) * Math.cos(lat2Rad);
-  const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) - Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
-  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+  return ((Math.atan2(Math.sin(dLon) * Math.cos(lat2Rad), Math.cos(lat1Rad) * Math.sin(lat2Rad) - Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon)) * 180) / Math.PI + 360) % 360;
 };
 
 const formatPace = (decimalMins) => {
   if (decimalMins == null || isNaN(decimalMins)) return "-:--";
-  let m = Math.floor(decimalMins);
-  let s = Math.round((decimalMins - m) * 60);
-  if (s === 60) { m += 1; s = 0; }
-  return `${m}:${s.toString().padStart(2, '0')} /km`;
+  return `${Math.floor(decimalMins)}:${Math.round((decimalMins - Math.floor(decimalMins)) * 60).toString().padStart(2, '0')} /km`;
 };
 
-function FitBounds({ coords }) {
+// Responsive geometric offset calculator
+function FitBounds({ coords, isMobileFrame, mobileDrawerOpen, mobileTab }) {
   const map = useMap();
   useEffect(() => {
     if (coords && coords.length > 0) {
-      map.fitBounds(coords, { padding: [50, 50] });
+      let bottomOffsetPadding = 50;
+      let topOffsetPadding = 50;
+
+      if (isMobileFrame && mobileDrawerOpen) {
+        topOffsetPadding = 110; 
+        bottomOffsetPadding = mobileTab === 'charts' ? window.innerHeight * 0.44 : window.innerHeight * 0.58;
+      }
+
+      map.fitBounds(coords, { 
+        paddingTopLeft: [40, topOffsetPadding],
+        paddingBottomRight: [40, bottomOffsetPadding],
+        animate: true,
+        duration: 0.5
+      });
     }
-  }, [coords, map]);
+  }, [coords, map, isMobileFrame, mobileDrawerOpen, mobileTab]);
   return null;
 }
 
 function ZoomTracker({ onZoomChange }) {
-  const map = useMapEvents({
-    zoomend() {
-      onZoomChange(map.getZoom());
-    }
-  });
+  const map = useMapEvents({ zoomend() { onZoomChange(map.getZoom()); } });
   return null;
 }
 
-function RecenterButton({ coords, isDark }) {
+function RecenterButton({ coords, isDark, isMobileFrame }) {
   const map = useMap();
   return (
     <button
       type="button"
-      onClick={() => {
-        if (coords && coords.length > 0) {
-          map.fitBounds(coords, { padding: [50, 50] });
-        }
-      }}
-      className={`absolute top-4 right-4 z-[1000] p-2.5 rounded-full shadow-md border transition-all duration-200 group flex items-center justify-center custom-recenter-fab-node ${
-        isDark 
-          ? 'bg-slate-900 text-slate-200 border-slate-800 hover:text-blue-400 hover:bg-slate-800' 
-          : 'bg-white text-slate-700 border-slate-200 hover:text-blue-600 hover:shadow-lg'
-      }`}
-      title="Recenter Map View"
+      onClick={() => { if (coords && coords.length > 0) map.invalidateSize(); }}
+      className={`absolute z-[1000] p-2.5 rounded-xl shadow-lg border transition-all active:scale-95 flex items-center justify-center ${
+        isMobileFrame ? 'bottom-4 right-3' : 'top-4 right-4'
+      } ${isDark ? 'bg-slate-900 text-slate-200 border-slate-800' : 'bg-white text-slate-700 border-slate-200'}`}
+      title="Recenter Visible Viewport"
     >
-      <Crosshair className="w-5 h-5 transition-transform duration-300 group-hover:rotate-90" />
+      <Crosshair className="w-4 h-4" />
     </button>
   );
 }
 
-export default function RouteMap({ segments, trackpoints, config, splits, activeHighlight, hoveredTrackpoint, setActiveHighlight, theme }) {
+export default function RouteMap({ segments, trackpoints, config, splits, activeHighlight, hoveredTrackpoint, setActiveHighlight, theme, isMobileFrame = false, mobileDrawerOpen = false, mobileTab = 'summary' }) {
   const [currentZoom, setCurrentZoom] = useState(13);
   const isDark = theme === 'dark';
 
@@ -152,7 +147,6 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
     return THICKNESS_MODES[currentMode];
   }, [config?.thickness]);
 
-  // Backwards-compatible, robust metric normalization mapping
   const enrichedTrackpoints = useMemo(() => {
     if (!trackpoints || !segments || segments.length === 0) return [];
     let lastKnown = { 'pace_min_per_km': null, 'heart_rate_bpm': null, 'cadence': null, 'altitude_m': null, 'distance_m': null };
@@ -172,45 +166,7 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
     });
   }, [trackpoints, segments]);
 
-  // UNIFIED EVALUATION LOGIC: Slices metrics down to the single trackpoint row boundary
-  const evaluateTrackpointHighlight = useMemo(() => {
-    return (tp, highlight) => {
-      if (!highlight) return true;
-
-      // 1. Time or Interval Range Matchers (Time Brushes / Rolling Best Workouts)
-      const hStart = highlight.start || highlight.start_time;
-      const hEnd = highlight.end || highlight.end_time;
-      if (hStart && hEnd) {
-        return tp.time >= hStart && tp.time <= hEnd;
-      }
-
-      // 2. Kilometer Split Boundary Matchers
-      if (highlight.type === 'split' && highlight.index !== undefined) {
-        const targetSplit = splits?.find(s => s.index === highlight.index);
-        if (targetSplit) {
-          return tp.time >= targetSplit.start_time && tp.time <= targetSplit.end_time;
-        }
-        // Fallback to absolute distance vectors if timestamps are missing
-        const startDist = (highlight.index - 1) * 1000;
-        const endDist = highlight.index * 1000;
-        return tp._distance_m >= startDist && tp._distance_m <= endDist;
-      }
-
-      // 3. Metric Histogram Bin Matchers
-      if (highlight.type === 'metric') {
-        const val = tp[`_${highlight.metricKey}`];
-        if (val == null) return false;
-        if (highlight.isFirstBin) return val <= highlight.max;
-        if (highlight.isLastBin) return val >= highlight.min;
-        return val >= highlight.min && val <= highlight.max;
-      }
-
-      return false;
-    };
-  }, [splits]);
-
-  if (!segments || segments.length === 0 || !config) return null;
-
+  // RESTORED FULL SEGMENT POPUP BUILDER
   const renderSegmentTooltip = (seg, idx) => {
     const stateLabel = seg.label.charAt(0).toUpperCase() + seg.label.slice(1).toLowerCase();
     const distKm = ((seg.distance_m || 0) / 1000).toFixed(2);
@@ -223,14 +179,14 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
       elevDeltaStr = `${elevDiff >= 0 ? '+' : ''}${elevDiff.toFixed(1)} m`;
     }
 
-    let motionEmoji = "🏃";
+    let motionEmoji = "👟";
     if (stateLabel === "Walking") motionEmoji = "🚶";
     if (stateLabel === "Stopped") motionEmoji = "🛑";
 
     return (
       <Tooltip sticky permanent={false} direction="top">
         <div className="bg-slate-950 text-white p-2.5 rounded-lg shadow-xl text-xs font-medium border border-slate-800 leading-normal min-w-[150px]">
-          <div className="font-extrabold border-b border-slate-800 pb-1 mb-1.5 text-blue-400 flex items-center justify-between">
+          <div className="font-extrabold border-b border-slate-800 pb-1 mb-1 text-blue-400 flex items-center justify-between">
             <span>{motionEmoji} {stateLabel}</span>
             <span className="text-[10px] text-slate-500 font-normal">Interval {idx + 1}</span>
           </div>
@@ -239,14 +195,37 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
             <div className="flex justify-between"><span>Pace:</span><span className="font-bold text-white">{formatPace(seg.avg_pace_min_per_km)}</span></div>
             <div className="flex justify-between"><span>Avg HR:</span><span className="font-bold text-white">{seg.avg_hr_bpm ? `${Math.round(seg.avg_hr_bpm)} bpm` : '-'}</span></div>
             <div className="flex justify-between"><span>Cadence:</span><span className="font-bold text-white">{cadenceVal ? `${Math.round(cadenceVal)} spm` : '-'}</span></div>
-            <div className="flex justify-between"><span>Elev:</span><span className={`font-bold ${elevDeltaStr.startsWith('+') ? 'text-emerald-400' : elevDeltaStr.startsWith('-') ? 'text-rose-400' : 'text-white'}`}>{elevDeltaStr}</span></div>
+            <div className="flex justify-between"><span>Elev:</span><span className={`font-bold ${elevDeltaStr.startsWith('+') ? 'text-emerald-400' : 'text-rose-400'}`}>{elevDeltaStr}</span></div>
           </div>
         </div>
       </Tooltip>
     );
   };
 
-  // ARCHITECTURAL UPGRADE: Contiguous Point-to-Point Path Assembly Layer
+  const evaluateTrackpointHighlight = useMemo(() => {
+    return (tp, highlight) => {
+      if (!highlight) return true;
+      const hStart = highlight.start || highlight.start_time;
+      const hEnd = highlight.end || highlight.end_time;
+      if (hStart && hEnd) return tp.time >= hStart && tp.time <= hEnd;
+
+      if (highlight.type === 'split' && highlight.index !== undefined) {
+        const targetSplit = splits?.find(s => s.index === highlight.index);
+        if (targetSplit) return tp.time >= targetSplit.start_time && tp.time <= targetSplit.end_time;
+        return tp._distance_m >= (highlight.index - 1) * 1000 && tp._distance_m <= highlight.index * 1000;
+      }
+
+      if (highlight.type === 'metric') {
+        const val = tp[`_${highlight.metricKey}`];
+        if (val == null) return false;
+        if (highlight.isFirstBin) return val <= highlight.max;
+        if (highlight.isLastBin) return val >= highlight.min;
+        return val >= highlight.min && val <= highlight.max;
+      }
+      return false;
+    };
+  }, [splits]);
+
   const baseStandardPolylines = useMemo(() => {
     if (config.overlayMetric !== 'None' || (activeHighlight?.type === 'metric')) return [];
     if (enrichedTrackpoints.length === 0) return [];
@@ -260,87 +239,54 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
     for (let i = 0; i < enrichedTrackpoints.length; i++) {
       const tp = enrichedTrackpoints[i];
       if (!config.motionTypes[tp._motionState]) {
-        if (currentChunk.length > 1) {
-          segmentsList.push({ coords: currentChunk, state: currentState, highlighted: currentHighlightStatus });
-        }
-        currentChunk = [];
-        continue;
+        if (currentChunk.length > 1) segmentsList.push({ coords: currentChunk, state: currentState, highlighted: currentHighlightStatus });
+        currentChunk = []; currentState = null; continue;
       }
 
       const isHighlighted = evaluateTrackpointHighlight(tp, activeHighlight);
+      if (currentState === null) { currentState = tp._motionState; currentHighlightStatus = isHighlighted; }
 
-      if (currentState === null) {
-        currentState = tp._motionState;
-        currentHighlightStatus = isHighlighted;
-      }
-
-      // Slice the line instantly when the highlight or motion state boundaries shift
       if (tp._motionState !== currentState || isHighlighted !== currentHighlightStatus) {
         if (currentChunk.length > 0) {
-          currentChunk.push([tp.latitude, tp.longitude]); // Connect the gap cleanly
+          currentChunk.push([tp.latitude, tp.longitude]);
           segmentsList.push({ coords: currentChunk, state: currentState, highlighted: currentHighlightStatus });
         }
-        currentChunk = [[tp.latitude, tp.longitude]];
-        currentState = tp._motionState;
-        currentHighlightStatus = isHighlighted;
+        currentChunk = [[tp.latitude, tp.longitude]]; currentState = tp._motionState; currentHighlightStatus = isHighlighted;
       } else {
         currentChunk.push([tp.latitude, tp.longitude]);
       }
     }
-    if (currentChunk.length > 1) {
-      segmentsList.push({ coords: currentChunk, state: currentState, highlighted: currentHighlightStatus });
-    }
+    if (currentChunk.length > 1) segmentsList.push({ coords: currentChunk, state: currentState, highlighted: currentHighlightStatus });
 
     return segmentsList.map((chunk, idx) => {
       const pathColor = STATE_COLORS[chunk.state] || '#3b82f6';
-      const weight = activeHighlight 
-        ? (chunk.highlighted ? getZoomWeight(baseWeights.standardActive, currentZoom) : getZoomWeight(baseWeights.standardDimmed, currentZoom)) 
-        : getZoomWeight(baseWeights.standard, currentZoom);
-      const opacity = activeHighlight ? (chunk.highlighted ? 1.0 : 0.15) : 0.8;
+      const weight = activeHighlight ? (chunk.highlighted ? getZoomWeight(baseWeights.standardActive, currentZoom) : getZoomWeight(baseWeights.standardDimmed, currentZoom)) : getZoomWeight(baseWeights.standard, currentZoom);
+      
+      const parentSegmentIndex = segments.findIndex(seg => chunk.coords[0] && chunk.coords[0][0] === seg.coords[0][0]);
+      const matchedSegment = segments[parentSegmentIndex] || segments[0];
 
       return (
-        <Polyline 
-          key={`base-chunk-${idx}`} 
-          positions={chunk.coords}
-          className="custom-leaflet-track-vector"
-          pathOptions={{ color: pathColor, weight: weight, opacity: opacity, lineCap: 'round', strokeLinejoin: 'round' }}
-        />
+        <Polyline key={`base-chunk-${idx}`} positions={chunk.coords} className="custom-leaflet-track-vector" pathOptions={{ color: pathColor, weight: weight, opacity: activeHighlight ? (chunk.highlighted ? 1.0 : 0.12) : 0.85, lineCap: 'round', strokeLinejoin: 'round' }}>
+           {matchedSegment && renderSegmentTooltip(matchedSegment, parentSegmentIndex >= 0 ? parentSegmentIndex : idx)}
+        </Polyline>
       );
     });
-  }, [enrichedTrackpoints, config.overlayMetric, config.motionTypes, activeHighlight, currentZoom, modeConfig, evaluateTrackpointHighlight]);
+  }, [enrichedTrackpoints, config.overlayMetric, config.motionTypes, activeHighlight, currentZoom, modeConfig, evaluateTrackpointHighlight, segments]);
 
   const overlayPolylines = useMemo(() => {
-    const activeMetricTab = config.overlayMetric !== 'None' 
-      ? config.overlayMetric 
-      : (activeHighlight?.type === 'metric' ? (activeHighlight.metricKey === 'heart_rate_bpm' ? 'Heart Rate' : 'Cadence') : 'None');
-    
+    const activeMetricTab = config.overlayMetric !== 'None' ? config.overlayMetric : (activeHighlight?.type === 'metric' ? (activeHighlight.metricKey === 'heart_rate_bpm' ? 'Heart Rate' : 'Cadence') : 'None');
     if (activeMetricTab === 'None' || enrichedTrackpoints.length === 0) return [];
     
-    const rawMetricKey = METRIC_KEYS[activeMetricTab];
-    const internalKey = `_${rawMetricKey}`; 
+    const internalKey = `_${METRIC_KEYS[activeMetricTab]}`; 
     const interpolator = COLOR_SCALES[config.colorScale] || COLOR_SCALES['viridis'];
-
-    const validValues = [];
-    enrichedTrackpoints.forEach(tp => {
-      if (!config.motionTypes[tp._motionState]) return; 
-      let val = tp[internalKey];
-      if (val != null && isFinite(val) && !isNaN(val)) validValues.push(val);
-    });
-
+    const validValues = enrichedTrackpoints.map(tp => config.motionTypes[tp._motionState] ? tp[internalKey] : null).filter(v => v != null && isFinite(v));
     if (validValues.length === 0) return [];
 
-    let min = getPercentile(validValues, 0.05);
-    let max = getPercentile(validValues, 0.95);
-
-    if (rawMetricKey === 'pace_min_per_km') max = Math.min(max, 12.0);
-    if (rawMetricKey === 'cadence') min = Math.max(min, 100);
-    if (rawMetricKey === 'heart_rate_bpm') {
-      min = Math.max(min, 90);
-      max = getPercentile(validValues, 1);
-      max = Math.min(max, 200);
-    }
-
+    let min = getPercentile(validValues, 0.05), max = getPercentile(validValues, 0.95);
+    if (internalKey === '_pace_min_per_km') max = Math.min(max, 12.0);
+    if (internalKey === '_cadence') min = Math.max(min, 100);
     if (min === max) max = min + 1;
+
     const colorScale = d3Scale.scaleLinear().domain([min, max]).range([0, 1]).clamp(true);
     const lines = [];
     const baseWeights = modeConfig.weights;
@@ -349,50 +295,28 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
       const p1 = enrichedTrackpoints[i], p2 = enrichedTrackpoints[i + 1];
       if (!config.motionTypes[p1._motionState]) continue;
 
-      let val = p1[internalKey];
-      if (val == null) continue;
-      
-      let colorVal = colorScale(val);
-      if (internalKey === '_pace_min_per_km' || config.colorScale === 'warmcool') colorVal = 1 - colorVal;
+      let val = p1[internalKey]; if (val == null) continue;
+      let colorVal = colorScale(val); if (internalKey === '_pace_min_per_km' || config.colorScale === 'warmcool') colorVal = 1 - colorVal;
 
       const isPointSelected = evaluateTrackpointHighlight(p1, activeHighlight);
       const parentSegmentIndex = segments.findIndex(seg => p1.time >= seg.start_time && p1.time <= seg.end_time);
       const matchedSegment = segments[parentSegmentIndex];
 
-      const polylineHandlers = {
-        click: () => {
-          if (matchedSegment && setActiveHighlight) {
-            const uniqueId = `seg-${parentSegmentIndex}`;
-            if (activeHighlight?.id === uniqueId) setActiveHighlight(null);
-            else setActiveHighlight({ type: 'time', id: uniqueId, start: matchedSegment.start_time, end: matchedSegment.end_time });
-          }
-        }
-      };
-
       lines.push(
-        <Polyline key={i} positions={[[p1.latitude, p1.longitude], [p2.latitude, p2.longitude]]} 
-          eventHandlers={polylineHandlers}
-          className="custom-leaflet-track-vector"
-          pathOptions={{ 
-            color: interpolator(colorVal), 
-            weight: activeHighlight 
-              ? (isPointSelected ? getZoomWeight(baseWeights.overlayActive, currentZoom) : getZoomWeight(baseWeights.overlayDimmed, currentZoom)) 
-              : getZoomWeight(baseWeights.overlay, currentZoom), 
-            opacity: activeHighlight ? (isPointSelected ? 1.0 : 0.15) : 0.9, 
-            lineCap: 'round', strokeLinejoin: 'round' 
-          }} 
-        >
-          {matchedSegment && renderSegmentTooltip(matchedSegment, parentSegmentIndex)}
+        <Polyline key={i} positions={[[p1.latitude, p1.longitude], [p2.latitude, p2.longitude]]} className="custom-leaflet-track-vector" pathOptions={{ color: interpolator(colorVal), weight: activeHighlight ? (isPointSelected ? getZoomWeight(baseWeights.overlayActive, currentZoom) : getZoomWeight(baseWeights.overlayDimmed, currentZoom)) : getZoomWeight(baseWeights.overlay, currentZoom), opacity: activeHighlight ? (isPointSelected ? 1.0 : 0.12) : 0.9, lineCap: 'round', strokeLinejoin: 'round' }}>
+           {matchedSegment && renderSegmentTooltip(matchedSegment, parentSegmentIndex)}
         </Polyline>
       );
     }
     return lines;
-  }, [enrichedTrackpoints, config.overlayMetric, config.colorScale, config.motionTypes, activeHighlight, currentZoom, modeConfig, segments, evaluateTrackpointHighlight, setActiveHighlight]);
+  }, [enrichedTrackpoints, config.overlayMetric, config.colorScale, config.motionTypes, activeHighlight, currentZoom, modeConfig, evaluateTrackpointHighlight, segments]);
 
+  // RESTORED FULL MULTI-CHANNEL MARKERS (KM, TIME, AND DIRECTION VECTORS)
   const mapMarkers = useMemo(() => {
     if (!trackpoints || trackpoints.length === 0) return [];
     const markers = [];
 
+    // 1. Kilometer Splits Section Block
     if (config.markers.Kilometre && splits && splits.length > 0) {
       splits.forEach(split => {
          const tp = trackpoints.find(t => t.time >= split.end_time);
@@ -400,6 +324,7 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
       });
     }
 
+    // 2. RESTORED: 10-Minute Chronological Time Anchors
     if (config.markers.Time) {
        const startTime = new Date(trackpoints[0].time.replace(/-/g, '/')).getTime(); 
        const tenMins = 10 * 60 * 1000;
@@ -415,6 +340,7 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
        });
     }
 
+    // 3. RESTORED: Vector Directional Svg Arrows
     if (config.markers.Direction && trackpoints.length > 1) {
       const STEP_SIZE = 75; 
       for (let i = 0; i < trackpoints.length - STEP_SIZE; i += STEP_SIZE) {
@@ -445,57 +371,32 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
     return markers;
   }, [trackpoints, splits, config.markers, config.motionTypes, segments, modeConfig]);
 
-  const tileUrl = BASE_MAPS[config.baseMap];
-  const useBaseMapTiles = config.baseMap !== 'No Map';
+  if (!segments || segments.length === 0 || !config) return null;
 
   return (
-    <div className={`absolute inset-0 rounded-xl shadow-md border overflow-hidden z-0 transition-all duration-200 ${
-      !useBaseMapTiles 
-        ? (isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200') 
-        : (isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200')
-    }`}>
-      <MapContainer style={{ height: '100%', width: '100%' }} zoom={13} scrollWheelZoom={true}>
-        {useBaseMapTiles && <TileLayer key={config.baseMap} url={tileUrl} attribution='&copy; OpenStreetMap contributors' />}
-        <FitBounds coords={allCoords} />
+    <div className="absolute inset-0 rounded-xl overflow-hidden z-0 w-full h-full">
+      <MapContainer style={{ height: '100%', width: '100%' }} zoom={13} scrollWheelZoom={true} zoomControl={false}>
+        <TileLayer key={config.baseMap} url={BASE_MAPS[config.baseMap] || BASE_MAPS['Standard']} attribution='&copy; OpenStreetMap' />
+        <FitBounds coords={allCoords} isMobileFrame={isMobileFrame} mobileDrawerOpen={mobileDrawerOpen} mobileTab={mobileTab} />
         <ZoomTracker onZoomChange={setCurrentZoom} />
         
-        <RecenterButton coords={allCoords} isDark={isDark} />
+        <ZoomControl position="topleft" />
+        <RecenterButton coords={allCoords} isDark={isDark} isMobileFrame={isMobileFrame} />
         
-        {/* Dynamic high-fidelity base rendering blocks */}
         {baseStandardPolylines}
-
-        {/* Dynamic color-scaled metric overlays */}
-        {((config.overlayMetric !== 'None') || (activeHighlight?.type === 'metric')) && overlayPolylines}
+        {overlayPolylines}
 
         {mapMarkers.map(m => {
           if (m.isDirectional) return <Marker key={m.id} position={m.pos} icon={m.icon} />;
           return (
             <CircleMarker key={m.id} center={m.pos} radius={modeConfig.markerRadius} pathOptions={{ color: 'white', fillColor: m.color, fillOpacity: 1, weight: 2 }}>
-              <Tooltip direction="top" offset={[0, -10]} opacity={0.9} permanent 
-                className={`font-bold rounded shadow-sm border-0 px-2 py-1 transition-colors duration-200 ${
-                  isDark ? 'bg-slate-950 text-slate-200 border border-slate-800' : 'bg-white text-slate-800'
-                }`} 
-                style={{ fontSize: modeConfig.fontSize }}
-              >
-                {m.text}
-              </Tooltip>
+              <Tooltip direction="top" offset={[0, -10]} opacity={0.9} permanent className={`font-bold rounded shadow-sm border-0 px-2 py-0.5 ${isDark ? 'bg-slate-950 text-slate-200 border border-slate-800' : 'bg-white text-slate-800'}`} style={{ fontSize: modeConfig.fontSize }}>{m.text}</Tooltip>
             </CircleMarker>
           );
         })}
 
         {hoveredTrackpoint && (
-          <CircleMarker 
-            key={`tracker-${hoveredTrackpoint.time}-${hoveredTrackpoint.latitude}`} 
-            center={[hoveredTrackpoint.latitude, hoveredTrackpoint.longitude]} 
-            radius={modeConfig.markerRadius + 3} 
-            pathOptions={{ 
-              color: 'white', 
-              fillColor: '#edc001', 
-              fillOpacity: 1, 
-              weight: 2.5,
-              className: 'animate-pulse'
-            }} 
-          />
+          <CircleMarker center={[hoveredTrackpoint.latitude, hoveredTrackpoint.longitude]} radius={modeConfig.markerRadius + 3} pathOptions={{ color: 'white', fillColor: '#edc001', fillOpacity: 1, weight: 2.5 }} />
         )}
       </MapContainer>
     </div>
