@@ -593,24 +593,24 @@ function App() {
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}>
-                <h3 className="text-xs font-black uppercase tracking-wider text-blue-500 mb-1">📁 Multi-Format Ingestion</h3>
-                <p className="text-xs text-slate-400 leading-normal font-medium">Parses standard high-density Garmin/Coros training center xml logs (.tcx) and binary multi-channel loops (.fit) accurately.</p>
+                <h3 className="text-xs font-black uppercase tracking-wider text-blue-500 mb-1">📁 Multi-Format Uploads</h3>
+                <p className="text-xs text-slate-400 leading-normal font-medium">Supports standard .fit/.tcx sensor files, activity data from Strava.</p>
               </div>
               <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}>
-                <h3 className="text-xs font-black uppercase tracking-wider text-emerald-500 mb-1">🔒 Zero-Knowledge Ledger</h3>
-                <p className="text-xs text-slate-400 leading-normal font-medium">Applies irreversible SHA-256 signatures to isolate identity variables. No real-world context profiles touch storage.</p>
+                <h3 className="text-xs font-black uppercase tracking-wider text-emerald-500 mb-1">🔒 Smart Privacy Masking</h3>
+                <p className="text-xs text-slate-400 leading-normal font-medium">Keep home/office locations hidden; clips the first and last 500m of your map track coordinates.</p>
               </div>
               <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}>
-                <h3 className="text-xs font-black uppercase tracking-wider text-purple-500 mb-1">📊 Peak Rolling Intervals</h3>
-                <p className="text-xs text-slate-400 leading-normal font-medium">Computes mathematical best rolling workout spans (400m, 1K, 5K) and splits paired with aerobic Efficiency Factors (EF).</p>
+                <h3 className="text-xs font-black uppercase tracking-wider text-purple-500 mb-1">📊 Deep Workout Analytics</h3>
+                <p className="text-xs text-slate-400 leading-normal font-medium">Peak rolling intervals (400m, 1K, 5K) and KM splits paired with aerobic Efficiency Factors (EF).</p>
               </div>
               <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}>
-                <h3 className="text-xs font-black uppercase tracking-wider text-amber-500 mb-1">👁️ Cross-Pane Sync Engine</h3>
-                <p className="text-xs text-slate-400 leading-normal font-medium">Scrubbing or touching coordinates instantly locks crosshairs and moves spatial visualizers on the map framework cleanly.</p>
+                <h3 className="text-xs font-black uppercase tracking-wider text-amber-500 mb-1">👁️ Map & Elevation Sync</h3>
+                <p className="text-xs text-slate-400 leading-normal font-medium">Sync exactly where your heart rate peaked, cadence dropped, pace quickened with your route on map.</p>
               </div>
             </div>
             <div className={`p-4 rounded-xl border text-center shadow-inner ${theme === 'dark' ? 'bg-blue-950/20 border-blue-900/30 text-blue-400' : 'bg-blue-50/5 border-blue-500/10 text-blue-600'}`}>
-              <p className="text-[11px] font-bold leading-normal">🛡️ <span className="uppercase tracking-wider font-black mr-1">Privacy Isolation Guard:</span> Workouts process locally inside secure temporary state buffers. For athletes using history saves, emails drop instantly into irreversible cryptographic signature matrices, protecting locations from identity vectors.</p>
+              <p className="text-[11px] font-bold leading-normal">🛡️ <span className="uppercase tracking-wider font-black mr-1">Privacy Isolation Guard:</span> Workouts are processed inside secure temporary memory. For athletes using history saves, emails are turned instantly into irreversible cryptographic signature matrices, protecting locations from identity vectors. In short we never store or save your email address!</p>
             </div>
           </div>
 
