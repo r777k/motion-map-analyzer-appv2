@@ -116,11 +116,15 @@ export default function PerformanceStats({ performance, activeHighlight, setActi
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className={`border-b ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-slate-50'}`}>
-                    {rawHeaders.map(header => (
-                      <th key={header} className="px-3 py-2 font-bold uppercase tracking-wider text-[10px] opacity-70">
-                        {friendlyHeaders[headerLower] || header.replace(/_/g, ' ')}
-                      </th>
-                    ))}
+                    {rawHeaders.map(header => {
+                      // FIXED: Explicitly define headerLower in this map loop scope
+                      const headerLower = header.toLowerCase(); 
+                      return (
+                        <th key={header} className="px-3 py-2 font-bold uppercase tracking-wider text-[10px] opacity-70 whitespace-nowrap">
+                          {friendlyHeaders[headerLower] || header.replace(/_/g, ' ')}
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody>
@@ -162,13 +166,13 @@ export default function PerformanceStats({ performance, activeHighlight, setActi
                           } else if (headerLower.includes("hr") || headerLower.includes("cadence")) {
                               val = val !== null ? Math.round(val) : '-'; 
                           } else if (headerLower === "ef" && val !== null) {
-                              // FIXED: explicitly target EF format styling (limit to 2 decimals)
+                              // Ensure EF values lock to 2 decimal places cleanly
                               val = parseFloat(val).toFixed(2);
                           } else if (typeof val === 'number') {
                               val = Number.isInteger(val) ? val : parseFloat(val.toFixed(2));
                           }
 
-                          return <td key={header} className="px-3 py-2 font-medium">{val !== null ? val : '-'}</td>;
+                          return <td key={header} className="px-3 py-2 font-medium whitespace-nowrap">{val !== null ? val : '-'}</td>;
                         })}
                       </tr>
                     );
