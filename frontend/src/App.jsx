@@ -132,6 +132,12 @@ function App() {
     return () => { document.removeEventListener('mousemove', handleMouseMove); document.removeEventListener('mouseup', handleMouseUp); };
   }, [isDraggingSplitter]);
 
+  // FIXED: Restored the missing handleFileChange function
+  const handleFileChange = (e) => {
+    setFile(e.target.files[0]);
+    setData(null);
+  };
+
   const handleCloseRun = () => { setData(null); setFile(null); setError(null); setActiveHighlight(null); setHoveredTrackpoint(null); };
 
   const handleLoadSavedActivity = async (id) => {
@@ -280,13 +286,43 @@ function App() {
     return 0;
   });
 
+  const renderAppFeatureDescriptionsGrid = () => (
+    <div className="space-y-4 w-full mt-4">
+      <h2 className="text-xs font-black uppercase tracking-wider flex items-center opacity-80"><Sparkles className="w-4 h-4 mr-1.5 text-blue-500" /> Quick Start & Feature Highlights</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}>
+          <h3 className="text-xs font-black uppercase tracking-wider text-blue-500 mb-1">📁 Multi-Format Activity Import</h3>
+          <p className="text-xs text-slate-400 leading-normal font-medium">Upload .FIT or .TCX files, or connect to Strava to access your activities.</p>
+        </div>
+        <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}>
+          <h3 className="text-xs font-black uppercase tracking-wider text-emerald-500 mb-1">🔒 Smart Privacy Masking</h3>
+          <p className="text-xs text-slate-400 leading-normal font-medium">Keeps sensitive locations private when sharing; by clipping the start and end, 500m, of your route.</p>
+        </div>
+        <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}>
+          <h3 className="text-xs font-black uppercase tracking-wider text-purple-500 mb-1">📊 Deep Workout Analytics</h3>
+          <p className="text-xs text-slate-400 leading-normal font-medium">Track peak rolling intervals (400m, 1K, 5K), km splits, and aerobic efficiency (EF).</p>
+        </div>
+        <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}>
+          <h3 className="text-xs font-black uppercase tracking-wider text-amber-500 mb-1">👁️ Activity Insights Map</h3>
+          <p className="text-xs text-slate-400 leading-normal font-medium">Map your run with precision - track exactly where your heart rate peaked, cadence dropped, and pace shifted.</p>
+        </div>
+      </div>
+      <div className={`p-4 rounded-xl border text-xs leading-relaxed font-medium ${theme === 'dark' ? 'bg-slate-900/20 border-slate-800/60 text-slate-400' : 'bg-slate-100/60 border-slate-200 text-slate-500'}`}>
+         <span className="font-black text-slate-700 dark:text-slate-200 block mb-1">🛡️ Privacy Isolation Guard:</span> Your workouts are processed in secure, temporary memory. For saved history, emails are converted into irreversible cryptographic signatures—so your identity and location stay protected. Your email is never stored!
+      </div>
+    </div>
+  );
+
   const authModalDialogMarkup = authModalOpen && (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-[9000] p-4 animate-fadeIn">
       <div className={`max-w-md w-full rounded-2xl border p-6 shadow-2xl relative ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
         <button onClick={() => { setAuthModalOpen(false); setAuthStep(1); setAuthError(null); }} className="absolute top-4 right-4 p-1.5 rounded-lg border dark:border-slate-800"><X className="w-4 h-4" /></button>
         <div className="flex flex-col items-center text-center space-y-3">
           <div className={`p-3 rounded-full ${theme === 'dark' ? 'bg-slate-950 text-blue-400' : 'bg-blue-50 text-blue-600'}`}><KeyRound className="w-6 h-6" /></div>
-          <div><h3 className="text-sm font-black uppercase tracking-wider">Zero-Knowledge Access</h3><p className="text-xs text-slate-400 mt-1 leading-normal">Your email profile is instantly converted to a blind cryptographic signature hash before database storage lookups.</p></div>
+          <div>
+            <h3 className="text-sm font-black uppercase tracking-wider">Zero-Knowledge Access</h3>
+            <p className="text-xs text-slate-400 mt-1 leading-normal">Your email profile is instantly converted to a blind cryptographic signature hash before database storage lookups.</p>
+          </div>
         </div>
         {authStep === 1 ? (
           <form onSubmit={handleRequestOTP} className="mt-5 space-y-4">
@@ -336,16 +372,7 @@ function App() {
            
            {/* Section 1: Features Header Block */}
            <div className={`w-full p-6 rounded-2xl shadow-sm border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'}`}>
-              <h2 className="text-sm font-black uppercase tracking-wider flex items-center mb-4"><Sparkles className="w-4 h-4 mr-2 text-blue-500" /> Quick Start & Feature Highlights</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div><h3 className="text-[11px] font-black uppercase tracking-wider text-blue-500 mb-1">📁 Multi-Format Activity Import</h3><p className="text-xs text-slate-400 leading-normal font-medium">Upload .FIT or .TCX files, or connect to Strava to access your activities.</p></div>
-                <div><h3 className="text-[11px] font-black uppercase tracking-wider text-emerald-500 mb-1">🔒 Smart Privacy Masking</h3><p className="text-xs text-slate-400 leading-normal font-medium">Keeps sensitive locations private when sharing; by clipping the start and end, 500m, of your route.</p></div>
-                <div><h3 className="text-[11px] font-black uppercase tracking-wider text-purple-500 mb-1">📊 Deep Workout Analytics</h3><p className="text-xs text-slate-400 leading-normal font-medium">Track peak rolling intervals (400m, 1K, 5K), km splits, and aerobic efficiency (EF).</p></div>
-                <div><h3 className="text-[11px] font-black uppercase tracking-wider text-amber-500 mb-1">👁️ Activity Insights Map</h3><p className="text-xs text-slate-400 leading-normal font-medium">Map your run with precision - track exactly where your heart rate peaked, cadence dropped, and pace shifted.</p></div>
-              </div>
-              <div className={`mt-5 p-4 rounded-xl border text-xs leading-relaxed font-medium ${theme === 'dark' ? 'bg-slate-900/60 border-slate-800/80 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
-                <span className="font-black text-slate-700 dark:text-slate-200 block mb-1">🛡️ Privacy Isolation Guard:</span> Your workouts are processed in secure, temporary memory. For saved history, emails are converted into irreversible cryptographic signatures—so your identity and location stay protected. Your email is never stored!
-              </div>
+              {renderAppFeatureDescriptionsGrid()}
            </div>
 
            {/* Section 2: Upload and Data LEDGERS Container */}
@@ -534,7 +561,6 @@ function App() {
                   )}
                   {mobileTab === 'map' && <div className="p-1"><MapControls config={mapConfig} setConfig={setMapConfig} segments={data.segments} trackpoints={data.trackpoints} activeHighlight={activeHighlight} setActiveHighlight={setActiveHighlight} theme={theme} /></div>}
                   
-                  {/* FIXED HORIZONTAL SCROLL CHASSIS FOR TIMELINE CHART */}
                   {mobileTab === 'charts' && (
                      <div className="w-full overflow-x-auto min-w-0 pb-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 snap-x">
                         <div className="w-[1000px] h-[30vh] min-h-[220px] snap-center pr-4">
@@ -546,7 +572,6 @@ function App() {
             </div>
          )}
 
-         {/* FIXED: Renamed 'Biometrics' to 'Performance' */}
          <footer className="absolute bottom-0 left-0 right-0 h-16 bg-slate-950 text-white flex justify-around items-center z-50 border-t border-slate-800/80 shadow-2xl">
             <button onClick={() => { setMobileTab('summary'); setMobileDrawerOpen(true); }} className={`flex-1 h-full flex flex-col items-center justify-center space-y-0.5 text-[10px] font-black uppercase tracking-wider border-0 bg-transparent ${mobileTab === 'summary' && mobileDrawerOpen ? 'text-blue-400' : 'text-slate-500'}`}><BarChart3 className="w-4 h-4" /><span>Performance</span></button>
             <button onClick={() => { setMobileTab('charts'); setMobileDrawerOpen(true); }} className={`flex-1 h-full flex flex-col items-center justify-center space-y-0.5 text-[10px] font-black uppercase tracking-wider border-0 bg-transparent ${mobileTab === 'charts' && mobileDrawerOpen ? 'text-blue-400' : 'text-slate-500'}`}><Clock className="w-4 h-4" /><span>Timeline</span></button>
