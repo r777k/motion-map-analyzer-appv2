@@ -560,10 +560,11 @@ function App() {
                      </div>
                   )}
                   {mobileTab === 'map' && <div className="p-1"><MapControls config={mapConfig} setConfig={setMapConfig} segments={data.segments} trackpoints={data.trackpoints} activeHighlight={activeHighlight} setActiveHighlight={setActiveHighlight} theme={theme} /></div>}
-                  
+
+                  {/* MOBILE-ONLY TIMELINE SCROLLING FIX */}
                   {mobileTab === 'charts' && (
-                     <div className="w-full overflow-x-auto min-w-0 pb-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 snap-x">
-                        <div className="w-[1000px] h-[30vh] min-h-[220px] snap-center pr-4">
+                     <div className="w-full overflow-x-auto min-w-0 pb-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
+                        <div className="w-[1000px] h-[30vh] min-h-[220px] pr-4 relative">
                            <ElevationProfile trackpoints={data.trackpoints} segments={data.segments} config={mapConfig} activeHighlight={activeHighlight} setActiveHighlight={setActiveHighlight} setHoveredTrackpoint={setHoveredTrackpoint} theme={theme} isMobileFrame={true} />
                         </div>
                      </div>
