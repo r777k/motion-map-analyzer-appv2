@@ -193,11 +193,13 @@ def normalize_activity_payload(payload: dict) -> dict:
         perf = payload["performance"]
         rolling_key = next((k for k in perf if "rolling" in k or "best" in k), "best_rolling")
         if rolling_key in perf and isinstance(perf[rolling_key], list):
-            rolling_fields = ["window_m", "pace_min_per_km", "start_time", "end_time"]
+            # FIXED: Added "ef" to rolling interval whitelists
+            rolling_fields = ["window_m", "pace_min_per_km", "ef", "start_time", "end_time"]
             perf[rolling_key] = [reorder_dict_keys(item, rolling_fields) for item in perf[rolling_key]]
             
         if "km_splits" in perf and isinstance(perf["km_splits"], list):
-            splits_fields = ["index", "distance_m", "duration_s", "avg_pace_min_per_km", "avg_hr_bpm", "avg_cadence_spm", "start_time", "end_time"]
+            # FIXED: Added "ef" to kilometer splits whitelists
+            splits_fields = ["index", "distance_m", "duration_s", "avg_pace_min_per_km", "avg_hr_bpm", "avg_cadence_spm", "ef", "start_time", "end_time"]
             perf["km_splits"] = [reorder_dict_keys(item, splits_fields) for item in perf["km_splits"]]
             
         for zone_key in ["hr_bands", "cadence_bands"]:
@@ -209,7 +211,6 @@ def normalize_activity_payload(payload: dict) -> dict:
         payload["performance"] = reorder_dict_keys(perf, perf_root_sequence)
 
     return payload
-
 # ----------------------------------------------------------------------------------
 # UTILITY HELPER ROUTINES
 # ----------------------------------------------------------------------------------
@@ -428,7 +429,7 @@ async def analyze_strava_activity(activity_id: str, request: Request, current_us
     run_df = add_deltas(run_df)
     
     # CRITICAL: Route to the dedicated Strava velocity engine to preserve TCX isolation
-    run_df = add_smoothed_speed_strava(run_df, window_s=4.0)
+    run_df = add_smoothed_speed_strava(run_df, window_s=4)
 
     # ------------------------------------------------------------------------------
     # RE-INJECTION TUNNEL PASSTHROUGH (HYBRID DENSITY PACE VARIATION TUNING)
