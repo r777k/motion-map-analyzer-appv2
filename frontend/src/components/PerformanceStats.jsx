@@ -33,28 +33,28 @@ const formatTimeHHMMSS = (secs) => {
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
   const s = Math.floor(secs % 60);
-  return h > 0 ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` : `${m}:${s.toString().padStart(2, '0')}`;
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
 const formatPace = (decimalMins) => {
-  if (decimalMins == null || isNaN(decimalMins)) return "-";
-  let m = Math.floor(decimalMins);
-  let s = Math.round((decimalMins - m) * 60);
-  if (s === 60) { m += 1; s = 0; }
-  return `${m}:${s.toString().padStart(2, '0')} min/km`;
+  if (decimalMins == null || isNaN(decimalMins)) return "-:--";
+  const mins = Math.floor(decimalMins);
+  const secs = Math.round((decimalMins - mins) * 60);
+  return `${mins}:${secs.toString().padStart(2, '0')} /km`;
+};
+
+const extractTimeOnly = (dtStr) => {
+  if (!dtStr) return "-";
+  const parts = dtStr.split(" ");
+  return parts.length > 1 ? parts[1] : dtStr;
 };
 
 const formatWindowDistance = (val) => {
-  if (val == null) return "-";
-  const num = parseFloat(val);
+  const num = parseInt(val, 10);
   if (isNaN(num)) return val;
-  return num < 1000 ? `${num} m` : `${num / 1000} km`;
-};
-
-const extractTimeOnly = (dateStr) => {
-  if (!dateStr || typeof dateStr !== 'string') return "-";
-  const parts = dateStr.split(' ');
-  return parts.length > 1 ? parts[1] : dateStr;
+  if (num >= 1000) return `${(num / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+  return `${num}m`;
 };
 
 export default function PerformanceStats({ performance, activeHighlight, setActiveHighlight, theme }) {
@@ -62,18 +62,15 @@ export default function PerformanceStats({ performance, activeHighlight, setActi
   const isDark = theme === 'dark';
 
   return (
-    <div className={`p-5 rounded-xl border shadow-sm transition-colors duration-200 ${
-      isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
-    }`}>
-      <h3 className={`text-base font-bold mb-4 border-b pb-2 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-        Performance Stats
-      </h3>
-      
-      <div className="space-y-8">
-        {/* Preserved the entire original dynamic multi-table object mapper entry loop intact */}
+    <div className={`mt-2 ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>
+      <h2 className="text-sm font-black uppercase tracking-wider mb-4 flex items-center space-x-2">
+        <span className="text-blue-500">📊</span>
+        <span>Biometric Splits & Zones</span>
+      </h2>
+      <div className="space-y-6">
         {Object.entries(performance).map(([title, tableData]) => {
-          if (!document || !Array.isArray(tableData) || tableData.length === 0) return null;
-          
+          if (!Array.isArray(tableData) || tableData.length === 0) return null;
+
           let rawHeaders = Object.keys(tableData[0]);
           const titleLower = title.toLowerCase();
           
@@ -95,82 +92,56 @@ export default function PerformanceStats({ performance, activeHighlight, setActi
               h.toLowerCase().includes("pace") ||
               h.toLowerCase().includes("hr") ||        
               h.toLowerCase().includes("cadence") ||
-              h.toLowerCase().includes("time")
+              h.toLowerCase().includes("time") ||
+              h.toLowerCase() === "ef" // FIXED: Whitelist EF to prevent stripping
             );
           }
           
           if (isBandTable) {
             rawHeaders = rawHeaders.filter(h => 
-              !h.toLowerCase().includes("min_val") && 
-              !h.toLowerCase().includes("max_val")
+              h.toLowerCase().includes("band") || 
+              h.toLowerCase().includes("time") || 
+              h.toLowerCase().includes("distance") ||
+              h.toLowerCase() === "ef" // FIXED: Whitelist EF here too just in case
             );
           }
 
-          return (
-            <div key={title} className="overflow-x-auto">
-              <h4 className={`text-xs font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-400' : 'text-slate-700'}`}>{displayTitle}</h4>
-              <table className="w-full text-left text-xs whitespace-nowrap">
-                <thead className={`transition-colors ${isDark ? 'bg-slate-950/60 text-slate-400' : 'bg-slate-50 text-slate-600'}`}>
-                  <tr>
-                    {rawHeaders.map(header => {
-                      const headerLower = header.toLowerCase();
-                      let cleanHeader = friendlyHeaders[header] || friendlyHeaders[headerLower] || header.replace(/_/g, ' ');
-                      
-                      if (isSplitTable) {
-                        if (headerLower === "index") cleanHeader = "Split";
-                        if (headerLower.includes("pace")) cleanHeader = "Pace";
-                      }
-                      if (isRollingTable) {
-                        if (headerLower === "index" || headerLower.includes("window")) cleanHeader = "Interval Window";
-                        if (headerLower.includes("pace")) cleanHeader = "Avg Pace";
-                      }
+          if (rawHeaders.length === 0) return null;
 
-                      return (
-                        <th key={header} className={`px-3 py-2 border-b font-bold uppercase tracking-wider text-[10px] ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-                          {cleanHeader}
-                        </th>
-                      );
-                    })}
+          return (
+            <div key={title} className={`overflow-x-auto rounded-xl shadow-xs border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <div className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b ${isDark ? 'bg-slate-950 border-slate-800 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+                {displayTitle}
+              </div>
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className={`border-b ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-slate-50'}`}>
+                    {rawHeaders.map(header => (
+                      <th key={header} className="px-3 py-2 font-bold uppercase tracking-wider text-[10px] opacity-70">
+                        {friendlyHeaders[headerLower] || header.replace(/_/g, ' ')}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
-                <tbody className={`divide-y transition-colors ${isDark ? 'divide-slate-800/40 text-slate-300' : 'divide-slate-100 text-slate-700'}`}>
+                <tbody>
                   {tableData.map((row, idx) => {
-                    const rowUniqueId = `perf-${titleLower}-${row.index || row.window || idx}`;
-                    const isRowSelected = activeHighlight?.id === rowUniqueId;
-
-                    const handleRowClick = () => {
-                      if (isRowSelected) {
-                        setActiveHighlight(null);
-                        return;
-                      }
-
-                      if (isSplitTable || isRollingTable) {
-                        if (row.start_time && row.end_time) {
-                          setActiveHighlight({ type: 'time', id: rowUniqueId, start: row.start_time, end: row.end_time });
-                        }
-                      } else if (isBandTable) {
-                        const isHr = titleLower.includes("hr") || titleLower.includes("heart");
-                        const metricKey = isHr ? "heart_rate_bpm" : "cadence";
-                        const minBound = row.min_val != null ? row.min_val : 0;
-                        const maxBound = row.max_val != null ? row.max_val : 999;
-
-                        setActiveHighlight({
-                          type: 'metric', id: rowUniqueId, metricKey, min: minBound, max: maxBound,
-                          isFirstBin: row.min_val == null || minBound === 0,
-                          isLastBin: row.max_val == null || maxBound === 999
-                        });
-                      }
-                    };
+                    const rowKey = `${title}-${idx}`;
+                    
+                    let highlightProps = null;
+                    if (isSplitTable) { highlightProps = { type: 'split', index: row.index }; } 
+                    else if (isRollingTable) { highlightProps = { start: row.start_time, end: row.end_time }; }
+                    
+                    const isRowHighlighted = activeHighlight && highlightProps && JSON.stringify(activeHighlight) === JSON.stringify(highlightProps);
 
                     return (
                       <tr 
-                        key={idx} 
-                        onClick={handleRowClick}
-                        className={`transition-colors duration-150 cursor-pointer select-none ${
-                          isRowSelected 
-                            ? (isDark ? 'bg-blue-950/40 text-blue-400 font-bold border-l-4 border-l-blue-500 shadow-sm' : 'bg-blue-50 text-blue-900 font-semibold border-l-4 border-l-blue-500') 
-                            : (isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50/80')
-                        }`}
+                        key={rowKey} 
+                        className={`border-b cursor-pointer transition-colors duration-150 last:border-b-0
+                          ${isDark ? 'border-slate-800 hover:bg-slate-800' : 'border-slate-100 hover:bg-blue-50'}
+                          ${isRowHighlighted ? (isDark ? 'bg-slate-800' : 'bg-blue-50/80') : ''}
+                        `}
+                        onMouseEnter={() => { if (highlightProps) setActiveHighlight(highlightProps); }}
+                        onMouseLeave={() => { if (highlightProps) setActiveHighlight(null); }}
                       >
                         {rawHeaders.map(header => {
                           let val = row[header];
@@ -190,6 +161,9 @@ export default function PerformanceStats({ performance, activeHighlight, setActi
                               val = (val / 1000).toFixed(2) + " km";
                           } else if (headerLower.includes("hr") || headerLower.includes("cadence")) {
                               val = val !== null ? Math.round(val) : '-'; 
+                          } else if (headerLower === "ef" && val !== null) {
+                              // FIXED: explicitly target EF format styling (limit to 2 decimals)
+                              val = parseFloat(val).toFixed(2);
                           } else if (typeof val === 'number') {
                               val = Number.isInteger(val) ? val : parseFloat(val.toFixed(2));
                           }
