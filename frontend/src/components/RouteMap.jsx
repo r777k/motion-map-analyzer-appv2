@@ -88,7 +88,6 @@ const formatPace = (decimalMins) => {
   return `${Math.floor(decimalMins)}:${Math.round((decimalMins - Math.floor(decimalMins)) * 60).toString().padStart(2, '0')} /km`;
 };
 
-// Responsive geometric offset calculator
 function FitBounds({ coords, isMobileFrame, mobileDrawerOpen, mobileTab }) {
   const map = useMap();
   useEffect(() => {
@@ -97,8 +96,10 @@ function FitBounds({ coords, isMobileFrame, mobileDrawerOpen, mobileTab }) {
       let topOffsetPadding = 50;
 
       if (isMobileFrame && mobileDrawerOpen) {
+        // Nudge padding: 110px from the top (to clear header/controls)
         topOffsetPadding = 110; 
-        bottomOffsetPadding = mobileTab === 'charts' ? window.innerHeight * 0.44 : window.innerHeight * 0.58;
+        // 72% offset from the bottom keeps it centered entirely in the visible upper pane
+        bottomOffsetPadding = mobileTab === 'charts' ? window.innerHeight * 0.44 : window.innerHeight * 0.72;
       }
 
       map.fitBounds(coords, { 
@@ -166,7 +167,6 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
     });
   }, [trackpoints, segments]);
 
-  // RESTORED FULL SEGMENT POPUP BUILDER
   const renderSegmentTooltip = (seg, idx) => {
     const stateLabel = seg.label.charAt(0).toUpperCase() + seg.label.slice(1).toLowerCase();
     const distKm = ((seg.distance_m || 0) / 1000).toFixed(2);
@@ -311,12 +311,10 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
     return lines;
   }, [enrichedTrackpoints, config.overlayMetric, config.colorScale, config.motionTypes, activeHighlight, currentZoom, modeConfig, evaluateTrackpointHighlight, segments]);
 
-  // RESTORED FULL MULTI-CHANNEL MARKERS (KM, TIME, AND DIRECTION VECTORS)
   const mapMarkers = useMemo(() => {
     if (!trackpoints || trackpoints.length === 0) return [];
     const markers = [];
 
-    // 1. Kilometer Splits Section Block
     if (config.markers.Kilometre && splits && splits.length > 0) {
       splits.forEach(split => {
          const tp = trackpoints.find(t => t.time >= split.end_time);
@@ -324,7 +322,6 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
       });
     }
 
-    // 2. RESTORED: 10-Minute Chronological Time Anchors
     if (config.markers.Time) {
        const startTime = new Date(trackpoints[0].time.replace(/-/g, '/')).getTime(); 
        const tenMins = 10 * 60 * 1000;
@@ -340,7 +337,6 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
        });
     }
 
-    // 3. RESTORED: Vector Directional Svg Arrows
     if (config.markers.Direction && trackpoints.length > 1) {
       const STEP_SIZE = 75; 
       for (let i = 0; i < trackpoints.length - STEP_SIZE; i += STEP_SIZE) {
@@ -376,12 +372,14 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
   return (
     <div className="absolute inset-0 rounded-xl overflow-hidden z-0 w-full h-full">
       <MapContainer style={{ height: '100%', width: '100%' }} zoom={13} scrollWheelZoom={true} zoomControl={false}>
-        <TileLayer key={config.baseMap} url={BASE_MAPS[config.baseMap] || BASE_MAPS['Standard']} attribution='&copy; OpenStreetMap' />
+        <TileLayer key={config.baseMap} url={BASE_MAPS[config.baseMap] || BASE_MAPS['Standard']} attribution='&copy; OpenStreetMap contributors' />
         <FitBounds coords={allCoords} isMobileFrame={isMobileFrame} mobileDrawerOpen={mobileDrawerOpen} mobileTab={mobileTab} />
         <ZoomTracker onZoomChange={setCurrentZoom} />
-        
-        <ZoomControl position="topleft" />
+
         <RecenterButton coords={allCoords} isDark={isDark} isMobileFrame={isMobileFrame} />
+
+        {/* FIXED #4: Shift scale handles to topright to avoid app logo ribbon clipping on mobile frames */}
+        <ZoomControl position={isMobileFrame ? "topright" : "topleft"} />
         
         {baseStandardPolylines}
         {overlayPolylines}

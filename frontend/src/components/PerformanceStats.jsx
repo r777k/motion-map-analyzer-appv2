@@ -129,23 +129,46 @@ export default function PerformanceStats({ performance, activeHighlight, setActi
                 </thead>
                 <tbody>
                   {tableData.map((row, idx) => {
-                    const rowKey = `${title}-${idx}`;
-                    
-                    let highlightProps = null;
-                    if (isSplitTable) { highlightProps = { type: 'split', index: row.index }; } 
-                    else if (isRollingTable) { highlightProps = { start: row.start_time, end: row.end_time }; }
-                    
-                    const isRowHighlighted = activeHighlight && highlightProps && JSON.stringify(activeHighlight) === JSON.stringify(highlightProps);
+                    const rowUniqueId = `perf-${titleLower}-${row.index || row.window || idx}`;
+                    const isRowSelected = activeHighlight?.id === rowUniqueId;
+
+                    // FIX: Standardized highlight routing for both Hover and Click interactions
+                    const updateHighlightState = (isActive) => {
+                      if (!isActive) {
+                        setActiveHighlight(null);
+                        return;
+                      }
+
+                      if (isSplitTable || isRollingTable) {
+                        if (row.start_time && row.end_time) {
+                          setActiveHighlight({ type: 'time', id: rowUniqueId, start: row.start_time, end: row.end_time });
+                        }
+                      } else if (isBandTable) {
+                        // FIX: Stronger substring match for Metric overlays
+                        const isHr = titleLower.includes("hr") || titleLower.includes("heart");
+                        const metricKey = isHr ? "heart_rate_bpm" : "cadence";
+                        const minBound = row.min_val != null ? row.min_val : 0;
+                        const maxBound = row.max_val != null ? row.max_val : 999;
+
+                        setActiveHighlight({
+                          type: 'metric', id: rowUniqueId, metricKey, min: minBound, max: maxBound,
+                          isFirstBin: row.min_val == null || minBound === 0,
+                          isLastBin: row.max_val == null || maxBound === 999
+                        });
+                      }
+                    };
 
                     return (
                       <tr 
-                        key={rowKey} 
-                        className={`border-b cursor-pointer transition-colors duration-150 last:border-b-0
-                          ${isDark ? 'border-slate-800 hover:bg-slate-800' : 'border-slate-100 hover:bg-blue-50'}
-                          ${isRowHighlighted ? (isDark ? 'bg-slate-800' : 'bg-blue-50/80') : ''}
-                        `}
-                        onMouseEnter={() => { if (highlightProps) setActiveHighlight(highlightProps); }}
-                        onMouseLeave={() => { if (highlightProps) setActiveHighlight(null); }}
+                        key={idx} 
+                        onClick={() => updateHighlightState(!isRowSelected)}
+                        onMouseEnter={() => updateHighlightState(true)}
+                        onMouseLeave={() => updateHighlightState(false)}
+                        className={`transition-colors duration-150 cursor-pointer select-none ${
+                          isRowSelected 
+                            ? (isDark ? 'bg-blue-950/40 text-blue-400 font-bold border-l-4 border-l-blue-500 shadow-sm' : 'bg-blue-50 text-blue-900 font-semibold border-l-4 border-l-blue-500') 
+                            : (isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50/80')
+                        }`}
                       >
                         {rawHeaders.map(header => {
                           let val = row[header];
@@ -166,13 +189,13 @@ export default function PerformanceStats({ performance, activeHighlight, setActi
                           } else if (headerLower.includes("hr") || headerLower.includes("cadence")) {
                               val = val !== null ? Math.round(val) : '-'; 
                           } else if (headerLower === "ef" && val !== null) {
-                              // Ensure EF values lock to 2 decimal places cleanly
+                              // FIXED: explicitly target EF format styling (limit to 2 decimals)
                               val = parseFloat(val).toFixed(2);
                           } else if (typeof val === 'number') {
                               val = Number.isInteger(val) ? val : parseFloat(val.toFixed(2));
                           }
 
-                          return <td key={header} className="px-3 py-2 font-medium whitespace-nowrap">{val !== null ? val : '-'}</td>;
+                          return <td key={header} className="px-3 py-2 font-medium">{val !== null ? val : '-'}</td>;
                         })}
                       </tr>
                     );
