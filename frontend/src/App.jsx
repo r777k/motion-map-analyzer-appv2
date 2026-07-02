@@ -61,7 +61,6 @@ function App() {
 
   const [activeHighlight, setActiveHighlight] = useState(null);
 
-  // Automatically switch default stroke weights down to thin on mobile form factors
   useEffect(() => {
     if (window.innerWidth < 1024) {
       setMapConfig(prev => ({ ...prev, thickness: 'thin' }));
@@ -326,7 +325,6 @@ function App() {
     }
   };
 
-  // COMPLETE MULTI-SECTION SPREADSHEET ANALYSIS EXPORTER
   const exportToCSV = () => {
     if (!data) return;
     let csvContent = "";
@@ -432,6 +430,61 @@ function App() {
       return 0;
     });
 
+  // RESTORED FIX: User's explicitly requested copywriting layout
+  const renderAppFeatureDescriptionsGrid = () => (
+    <div className="space-y-4 w-full mt-4">
+      <h2 className="text-xs font-black uppercase tracking-wider flex items-center opacity-80"><Sparkles className="w-4 h-4 mr-1.5 text-blue-500" /> Quick Start & Feature Highlights</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}>
+          <h3 className="text-xs font-black uppercase tracking-wider text-blue-500 mb-1">📁 Multi-Format Activity Import</h3>
+          <p className="text-xs text-slate-400 leading-normal font-medium">Upload .FIT or .TCX files, or connect to Strava to access your activities.</p>
+        </div>
+        <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}>
+          <h3 className="text-xs font-black uppercase tracking-wider text-emerald-500 mb-1">🔒 Smart Privacy Masking</h3>
+          <p className="text-xs text-slate-400 leading-normal font-medium">Keeps sensitive locations private when sharing; by clipping the start and end, 500m, of your route.</p>
+        </div>
+        <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}>
+          <h3 className="text-xs font-black uppercase tracking-wider text-purple-500 mb-1">📊 Deep Workout Analytics</h3>
+          <p className="text-xs text-slate-400 leading-normal font-medium">Track peak rolling intervals (400m, 1K, 5K), km splits, and aerobic efficiency (EF).</p>
+        </div>
+        <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}>
+          <h3 className="text-xs font-black uppercase tracking-wider text-amber-500 mb-1">👁️ Activity Insights Map</h3>
+          <p className="text-xs text-slate-400 leading-normal font-medium">Map your run with precision - track exactly where your heart rate peaked, cadence dropped, and pace shifted.</p>
+        </div>
+      </div>
+      <div className={`p-4 rounded-xl border text-xs leading-relaxed font-medium ${theme === 'dark' ? 'bg-slate-900/20 border-slate-800/60 text-slate-400' : 'bg-slate-100/60 border-slate-200 text-slate-500'}`}>
+         <span className="font-black text-slate-700 dark:text-slate-200 block mb-1">🛡️ Privacy Isolation Guard:</span> Your workouts are processed in secure, temporary memory. For saved history, emails are converted into irreversible cryptographic signatures—so your identity and location stay protected. Your email is never stored!
+      </div>
+    </div>
+  );
+
+  const authModalDialogMarkup = authModalOpen && (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-[9000] p-4 animate-fadeIn">
+      <div className={`max-w-md w-full rounded-2xl border p-6 shadow-2xl relative ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+        <button onClick={() => { setAuthModalOpen(false); setAuthStep(1); setAuthError(null); }} className="absolute top-4 right-4 p-1.5 rounded-lg border dark:border-slate-800"><X className="w-4 h-4" /></button>
+        <div className="flex flex-col items-center text-center space-y-3">
+          <div className={`p-3 rounded-full ${theme === 'dark' ? 'bg-slate-950 text-blue-400' : 'bg-blue-50 text-blue-600'}`}><KeyRound className="w-6 h-6" /></div>
+          <div>
+            <h3 className="text-sm font-black uppercase tracking-wider">Zero-Knowledge Access</h3>
+            <p className="text-xs text-slate-400 mt-1 leading-normal">Your email profile is instantly converted to a blind cryptographic signature hash before database storage lookups.</p>
+          </div>
+        </div>
+        {authStep === 1 ? (
+          <form onSubmit={handleRequestOTP} className="mt-5 space-y-4">
+            <input type="email" required placeholder="runner@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className={`w-full px-4 py-2.5 rounded-xl text-xs font-bold border outline-none ${theme === 'dark' ? 'bg-slate-950 border-slate-800 focus:border-blue-500' : 'bg-slate-50 border-slate-200 focus:bg-white'}`} />
+            <button type="submit" disabled={authLoading} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md">{authLoading ? "Issuing Token..." : "Send Security Code"}</button>
+          </form>
+        ) : (
+          <form onSubmit={handleVerifyOTP} className="mt-5 space-y-4">
+            <input type="text" required maxLength={6} placeholder="000000" value={authOTP} onChange={(e) => setAuthOTP(e.target.value.replace(/\D/g, ''))} className="w-full tracking-[0.5em] text-center py-2.5 rounded-xl text-sm font-black border dark:bg-slate-950 dark:border-slate-800" />
+            <button type="submit" disabled={authLoading} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md">Verify & Log In</button>
+          </form>
+        )}
+        {authError && <div className="mt-3 p-2.5 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-xs font-bold text-center">{authError}</div>}
+      </div>
+    </div>
+  );
+
   const renderSharedUploadCard = () => (
     <div className={`p-6 md:p-8 rounded-2xl shadow-xl border w-full ${theme === 'dark' ? 'bg-slate-900 border-slate-800/80' : 'bg-white border-slate-200'}`}>
       <form onSubmit={handleUpload} className="flex flex-col items-center space-y-5">
@@ -476,7 +529,6 @@ function App() {
         </div>
       )}
       
-      {/* RESTORED BUG #1: Strava Link Feeds contain formatted granular date/time lines */}
       {userToken && stravaFeedItems.length > 0 && (
         <div className="mb-4">
           <h3 className="text-[10px] font-black uppercase tracking-wider text-[#FC6100] mb-2">🧡 Active Strava Link Feed</h3>
@@ -517,44 +569,9 @@ function App() {
     </div>
   );
 
-  // --- PASSWORDLESS OVERLAY MARKUP COMPONENT ---
-  const authModalDialogMarkup = authModalOpen && (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-[9000] p-4 animate-fadeIn">
-      <div className={`max-w-md w-full rounded-2xl border p-6 shadow-2xl relative ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
-        <button onClick={() => { setAuthModalOpen(false); setAuthStep(1); setAuthError(null); }} className="absolute top-4 right-4 p-1.5 rounded-lg border dark:border-slate-800"><X className="w-4 h-4" /></button>
-        <div className="flex flex-col items-center text-center space-y-3">
-          <div className={`p-3 rounded-full ${theme === 'dark' ? 'bg-slate-950 text-blue-400' : 'bg-blue-50 text-blue-600'}`}><KeyRound className="w-6 h-6" /></div>
-          <div>
-            <h3 className="text-sm font-black uppercase tracking-wider">Zero-Knowledge Access</h3>
-            <p className="text-xs text-slate-400 mt-1 leading-normal">Your email profile is instantly converted to a blind cryptographic signature hash before database storage lookups.</p>
-          </div>
-        </div>
-        {authStep === 1 ? (
-          <form onSubmit={handleRequestOTP} className="mt-5 space-y-4">
-            <input type="email" required placeholder="runner@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className={`w-full px-4 py-2.5 rounded-xl text-xs font-bold border outline-none ${theme === 'dark' ? 'bg-slate-950 border-slate-800 focus:border-blue-500' : 'bg-slate-50 border-slate-200 focus:bg-white'}`} />
-            <button type="submit" disabled={authLoading} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md">{authLoading ? "Issuing Token..." : "Send Security Code"}</button>
-          </form>
-        ) : (
-          <form onSubmit={handleVerifyOTP} className="mt-5 space-y-4">
-            <input type="text" required maxLength={6} placeholder="000000" value={authOTP} onChange={(e) => setAuthOTP(e.target.value.replace(/\D/g, ''))} className="w-full tracking-[0.5em] text-center py-2.5 rounded-xl text-sm font-black border dark:bg-slate-950 dark:border-slate-800" />
-            <button type="submit" disabled={authLoading} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md">Verify & Log In</button>
-          </form>
-        )}
-        {authError && <div className="mt-3 p-2.5 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-xs font-bold text-center">{authError}</div>}
-      </div>
-    </div>
-  );
-
-  const isOverlayFilterApplied = mapConfig.overlayMetric !== 'None' || activeHighlight !== null || Object.values(mapConfig.motionTypes).includes(false);
-
-  // ---------------------------------------------------------------------------
-  // OMISSION #2 RESTORED: Full 12-Column Responsive Landing Workspace
-  // ---------------------------------------------------------------------------
   if (!data) {
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center p-4 md:p-12 relative ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
-        
-        {/* Navigation Action Anchors */}
         <div className="absolute top-4 right-4 flex items-center space-x-2 z-50">
           {userToken ? (
             <div className="flex items-center space-x-2">
@@ -583,38 +600,10 @@ function App() {
           </div>
         )}
 
-        {/* RESTORED HIGH-FIDELITY TWIN CANVAS LANDING SYSTEM */}
         <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          
-          {/* Left Column Workspace: Core App Features description list blocks */}
           <div className="lg:col-span-7 space-y-5">
-            <h2 className="text-xl font-black tracking-tight flex items-center opacity-90">
-              <span className="mr-2">⚡</span> Quick Start & Feature Highlights
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}>
-                <h3 className="text-xs font-black uppercase tracking-wider text-blue-500 mb-1">📁 Multi-Format Uploads</h3>
-                <p className="text-xs text-slate-400 leading-normal font-medium">Supports standard .fit/.tcx sensor files, activity data from Strava.</p>
-              </div>
-              <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}>
-                <h3 className="text-xs font-black uppercase tracking-wider text-emerald-500 mb-1">🔒 Smart Privacy Masking</h3>
-                <p className="text-xs text-slate-400 leading-normal font-medium">Keep home/office locations hidden; clips the first and last 500m of your map track coordinates.</p>
-              </div>
-              <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}>
-                <h3 className="text-xs font-black uppercase tracking-wider text-purple-500 mb-1">📊 Deep Workout Analytics</h3>
-                <p className="text-xs text-slate-400 leading-normal font-medium">Peak rolling intervals (400m, 1K, 5K) and KM splits paired with aerobic Efficiency Factors (EF).</p>
-              </div>
-              <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}>
-                <h3 className="text-xs font-black uppercase tracking-wider text-amber-500 mb-1">👁️ Map & Elevation Sync</h3>
-                <p className="text-xs text-slate-400 leading-normal font-medium">Sync exactly where your heart rate peaked, cadence dropped, pace quickened with your route on map.</p>
-              </div>
-            </div>
-            <div className={`p-4 rounded-xl border text-center shadow-inner ${theme === 'dark' ? 'bg-blue-950/20 border-blue-900/30 text-blue-400' : 'bg-blue-50/5 border-blue-500/10 text-blue-600'}`}>
-              <p className="text-[11px] font-bold leading-normal">🛡️ <span className="uppercase tracking-wider font-black mr-1">Privacy Isolation Guard:</span> Workouts are processed inside secure temporary memory. For athletes using history saves, emails are turned instantly into irreversible cryptographic signature matrices, protecting locations from identity vectors. In short we never store or save your email address!</p>
-            </div>
+             {renderAppFeatureDescriptionsGrid()}
           </div>
-
-          {/* Right Column Workspace: Ingestion Engine or History logs list options */}
           <div className="lg:col-span-5 w-full">
             {activeSidebarTab === 'history' && userToken ? renderSharedHistoryLedger() : renderSharedUploadCard()}
           </div>
@@ -625,10 +614,12 @@ function App() {
     );
   }
 
+  const isOverlayFilterApplied = mapConfig.overlayMetric !== 'None' || activeHighlight !== null || Object.values(mapConfig.motionTypes).includes(false);
+
   return (
     <div className={`flex h-screen w-full overflow-hidden font-sans select-none transition-colors duration-200 ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
       
-      {/* 💻 DESKTOP DUAL CANVAS HARNESS */}
+      {/* 💻 DESKTOP DUAL CANVAS LAYOUT CHASSIS */}
       <div className="hidden lg:flex h-full w-full overflow-hidden flex-row">
         <div style={{ width: `${sidebarWidth}px` }} className={`flex-shrink-0 h-full overflow-y-auto p-5 shadow-sm flex flex-col space-y-6 border-r ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800' : 'bg-slate-50/50 border-slate-200'}`}>
           <header className="pb-4 border-b flex justify-between items-start flex-shrink-0 dark:border-slate-800">
@@ -658,8 +649,6 @@ function App() {
            </div>
            <div className="w-full flex-shrink-0 flex flex-col space-y-2">
               {data.trackpoints && <ElevationProfile trackpoints={data.trackpoints} segments={data.segments} config={mapConfig} activeHighlight={activeHighlight} setActiveHighlight={setActiveHighlight} setHoveredTrackpoint={setHoveredTrackpoint} theme={theme} />}
-              
-              {/* OMISSION #1 RESTORED: High-fidelity desktop telemetry disclaimer sub-bar node */}
               <div className="text-center w-full select-none pb-0.5 opacity-40 text-[9px] font-bold">
                 ⚠️ Motion segmentation and metrics are computational models. Coordinates match tracking centers but may vary from localized hardware records.
               </div>
@@ -667,16 +656,14 @@ function App() {
         </div>
       </div>
 
-      {/* 📱 PORTRAIT TOUCH-OPTIMIZED WEB SPA APPLICATION CHASSIS */}
+      {/* 📱 PORTRAIT TOUCH-OPTIMIZED WEB SPA VIEWPORT LAYOUT */}
       <div className="flex lg:hidden h-screen w-full flex-col relative overflow-hidden bg-slate-50 dark:bg-slate-950">
          
-         {/* HUD Row Container */}
          <div className="absolute top-3 left-3 right-3 z-50 flex items-center justify-between pointer-events-none">
             <div className="p-2 bg-slate-900/95 text-white rounded-xl shadow-lg border border-slate-800 flex items-center space-x-2 pointer-events-auto select-none">
                <img src="/logo.png" alt="Logo" className="w-5 h-5 flex-shrink-0" />
                <span className="text-[10px] font-black uppercase tracking-wider">{data.summary?.location_city?.split(',')[0] || "Route View"}</span>
             </div>
-            
             <div className="flex items-center space-x-1.5 pointer-events-auto">
                <button onClick={exportToCSV} title="Download Workout CSV Spreadsheet" className="p-2 bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-xl shadow-md text-slate-500 dark:text-slate-400 active:bg-slate-100"><Download className="w-4 h-4" /></button>
                <button onClick={() => setMobileDrawerOpen(!mobileDrawerOpen)} title={mobileDrawerOpen ? "Hide Metrics Panel Overlay" : "Show Metrics Panel Overlay"} className="p-2 bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-xl shadow-md text-slate-500 dark:text-slate-400 active:bg-slate-100">
@@ -686,7 +673,6 @@ function App() {
             </div>
          </div>
 
-         {/* Backdrop leaflet map engine view */}
          <div className="absolute inset-0 z-0">
             {data.trackpoints && (
               <RouteMap 
@@ -705,7 +691,6 @@ function App() {
             )}
          </div>
 
-         {/* Floating Expandable Overlay Bottom Sheet */}
          {mobileDrawerOpen && (
             <div className={`absolute left-3 right-3 z-40 transition-all duration-300 shadow-2xl border flex flex-col p-4 rounded-2xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 ${mobileTab === 'charts' ? 'bottom-20 max-h-[42vh]' : 'bottom-20 max-h-[58vh]'}`}>
                <div className="w-10 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-2.5 flex-shrink-0" />
@@ -719,14 +704,22 @@ function App() {
                      </div>
                   )}
                   {mobileTab === 'map' && <div className="p-1"><MapControls config={mapConfig} setConfig={setMapConfig} segments={data.segments} trackpoints={data.trackpoints} activeHighlight={activeHighlight} setActiveHighlight={setActiveHighlight} theme={theme} /></div>}
-                  {mobileTab === 'charts' && <div className="min-w-0 w-full h-full -mt-2"><ElevationProfile trackpoints={data.trackpoints} segments={data.segments} config={mapConfig} activeHighlight={activeHighlight} setActiveHighlight={setActiveHighlight} setHoveredTrackpoint={setHoveredTrackpoint} theme={theme} /></div>}
+                  
+                  {/* FIXED: Added explicit horizontal overflow wrappers on mobile for scrollable X-axis labels */}
+                  {mobileTab === 'charts' && (
+                     <div className="w-full overflow-x-auto min-w-0 pb-1 scrollbar-thin scrollbar-thumb-slate-400 dark:scrollbar-thumb-slate-700">
+                        <div className="w-[1000px] h-[30vh] min-h-[220px]">
+                           <ElevationProfile trackpoints={data.trackpoints} segments={data.segments} config={mapConfig} activeHighlight={activeHighlight} setActiveHighlight={setActiveHighlight} setHoveredTrackpoint={setHoveredTrackpoint} theme={theme} isMobileFrame={true} />
+                        </div>
+                     </div>
+                  )}
                </div>
             </div>
          )}
 
-         {/* Thumb Tab Navigation footer Bar */}
+         {/* FIXED: Renamed 'Biometrics' tab string to 'Performance' */}
          <footer className="absolute bottom-0 left-0 right-0 h-16 bg-slate-950 text-white flex justify-around items-center z-50 border-t border-slate-800/80 shadow-2xl">
-            <button onClick={() => { setMobileTab('summary'); setMobileDrawerOpen(true); }} className={`flex-1 h-full flex flex-col items-center justify-center space-y-0.5 text-[10px] font-black uppercase tracking-wider border-0 bg-transparent ${mobileTab === 'summary' && mobileDrawerOpen ? 'text-blue-400' : 'text-slate-500'}`}><BarChart3 className="w-4 h-4" /><span>Biometrics</span></button>
+            <button onClick={() => { setMobileTab('summary'); setMobileDrawerOpen(true); }} className={`flex-1 h-full flex flex-col items-center justify-center space-y-0.5 text-[10px] font-black uppercase tracking-wider border-0 bg-transparent ${mobileTab === 'summary' && mobileDrawerOpen ? 'text-blue-400' : 'text-slate-500'}`}><BarChart3 className="w-4 h-4" /><span>Performance</span></button>
             <button onClick={() => { setMobileTab('charts'); setMobileDrawerOpen(true); }} className={`flex-1 h-full flex flex-col items-center justify-center space-y-0.5 text-[10px] font-black uppercase tracking-wider border-0 bg-transparent ${mobileTab === 'charts' && mobileDrawerOpen ? 'text-blue-400' : 'text-slate-500'}`}><Clock className="w-4 h-4" /><span>Timeline</span></button>
             <button onClick={() => { setMobileTab('map'); setMobileDrawerOpen(true); }} className={`flex-1 h-full flex flex-col items-center justify-center space-y-0.5 text-[10px] font-black uppercase tracking-wider border-0 bg-transparent relative ${mobileTab === 'map' && mobileDrawerOpen ? 'text-blue-400' : 'text-slate-500'}`}>
                <Layers className="w-4 h-4" />
