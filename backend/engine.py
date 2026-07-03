@@ -1123,15 +1123,23 @@ def compute_ascent_descent(df: pd.DataFrame):
         
     alt = pd.to_numeric(df["altitude_m"], errors="coerce")
     
-    # TCX Elevation Noise Filter: Apply a 15-tick rolling median to strip spikes,
-    # followed by a 15-tick rolling mean to smooth out the staircase steps.
-    smoothed_alt = alt.rolling(window=15, center=True, min_periods=1).median()
-    smoothed_alt = smoothed_alt.rolling(window=15, center=True, min_periods=1).mean()
+    # FIXED: Dynamically scale the rolling window based on the dataset size.
+    # If the interval is smaller than 15 rows, reduce the window to prevent NaN collapse.
+    data_length = len(alt.dropna())
+    if data_length < 3:
+        return 0.0, 0.0
+        
+    window_size = min(15, data_length)
+    
+    # TCX Elevation Noise Filter: Apply a dynamically scaled rolling median to strip spikes,
+    # followed by a rolling mean to smooth out the staircase steps.
+    smoothed_alt = alt.rolling(window=window_size, center=True, min_periods=1).median()
+    smoothed_alt = smoothed_alt.rolling(window=window_size, center=True, min_periods=1).mean()
     
     # Calculate deltas on the smoothed terrain line
     delta = smoothed_alt.diff().fillna(0.0)
     
-    # Ignore any micro-variations under 0.2 meters to prevent noise accumulation
+    # Ignore any micro-variations under 0.2 meters to prevent GPS bounce accumulation
     ascent = float(delta[delta > 0.2].sum())
     descent = float((-delta[delta < -0.2]).sum())
     
@@ -1589,14 +1597,22 @@ def _compute_band_stats(
 
 def efficiency_index(df: pd.DataFrame, moving: bool = True) -> float:
     """
-    Simple EF‑style index (speed / HR) from getrunstats.15.py efficiency_index().[file:295]
+    Simple EF-style index (speed / HR). 
     Expressed as (avg_speed * 100) / avg_hr for readability.
     """
-    if "heart_rate_bpm" not in df.columns or "speed_m_s" not in df.columns:
+    if "heart_rate_bpm" not in df.columns:
         return np.nan
 
-    speed_for_motion = df.get("speed_smooth_m_s", df["speed_m_s"])
-    speed_for_motion = pd.to_numeric(speed_for_motion, errors="coerce")
+    # FIXED: Explicitly prioritize the smoothed velocity curve for both Strava and TCX
+    # This prevents the raw GPS coordinate static from dragging down TCX EF scores.
+    if "speed_smooth_m_s" in df.columns and df["speed_smooth_m_s"].notna().any():
+        speed_col = df["speed_smooth_m_s"]
+    elif "speed_m_s" in df.columns:
+        speed_col = df["speed_m_s"]
+    else:
+        return np.nan
+
+    speed_for_motion = pd.to_numeric(speed_col, errors="coerce")
 
     if moving:
         mask = speed_for_motion >= MOVING_SPEED_THRESH
@@ -1607,7 +1623,7 @@ def efficiency_index(df: pd.DataFrame, moving: bool = True) -> float:
     if subset.empty:
         return np.nan
 
-    avg_speed = pd.to_numeric(subset["speed_m_s"], errors="coerce").mean()
+    avg_speed = pd.to_numeric(speed_col.loc[mask], errors="coerce").mean()
     avg_hr = pd.to_numeric(subset["heart_rate_bpm"], errors="coerce").mean()
 
     if avg_hr <= 0 or np.isnan(avg_hr):
