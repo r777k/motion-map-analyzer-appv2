@@ -93,7 +93,7 @@ export default function PerformanceStats({ performance, activeHighlight, setActi
               h.toLowerCase().includes("hr") ||        
               h.toLowerCase().includes("cadence") ||
               h.toLowerCase().includes("time") ||
-              h.toLowerCase() === "ef" // FIXED: Whitelist EF to prevent stripping
+              h.toLowerCase().includes("ef") // FIXED: Whitelist EF to prevent stripping
             );
           }
           
