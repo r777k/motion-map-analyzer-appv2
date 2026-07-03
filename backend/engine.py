@@ -1120,10 +1120,21 @@ def basic_time_distance(df: pd.DataFrame):
 def compute_ascent_descent(df: pd.DataFrame):
     if "altitude_m" not in df.columns:
         return np.nan, np.nan
+        
     alt = pd.to_numeric(df["altitude_m"], errors="coerce")
-    delta = alt.diff().fillna(0.0)
-    ascent = float(delta.clip(lower=0).sum())
-    descent = float((-delta.clip(upper=0)).sum())
+    
+    # TCX Elevation Noise Filter: Apply a 15-tick rolling median to strip spikes,
+    # followed by a 15-tick rolling mean to smooth out the staircase steps.
+    smoothed_alt = alt.rolling(window=15, center=True, min_periods=1).median()
+    smoothed_alt = smoothed_alt.rolling(window=15, center=True, min_periods=1).mean()
+    
+    # Calculate deltas on the smoothed terrain line
+    delta = smoothed_alt.diff().fillna(0.0)
+    
+    # Ignore any micro-variations under 0.2 meters to prevent noise accumulation
+    ascent = float(delta[delta > 0.2].sum())
+    descent = float((-delta[delta < -0.2]).sum())
+    
     return ascent, descent
 
 def summarize_motion_totals(seg_df: pd.DataFrame):
@@ -1325,12 +1336,13 @@ def best_rolling_pace(df: pd.DataFrame, window_m: float) -> dict | None:
         return None
 
     times = pd.to_datetime(work["time"], errors="coerce").to_numpy()
-    # Use Local Time string if available to match the frontend Map data
     time_strs = work["time_str"].to_numpy() if "time_str" in work.columns else times
     
     best_pace = None
     best_start_time = None
     best_end_time = None
+    best_start_idx = 0
+    best_end_idx = 0
     end_idx = 0
 
     for start_idx in range(n):
@@ -1351,13 +1363,20 @@ def best_rolling_pace(df: pd.DataFrame, window_m: float) -> dict | None:
             best_pace = pace_min_per_km
             best_start_time = str(time_strs[start_idx])
             best_end_time = str(time_strs[end_idx])
+            best_start_idx = start_idx
+            best_end_idx = end_idx
 
     if best_pace is None:
         return None
 
+    # Slice out the best interval frame and calculate the Aerobic EF for that window
+    best_interval_df = work.iloc[best_start_idx:best_end_idx + 1]
+    ef_val = efficiency_index(best_interval_df, moving=True)
+
     return {
         "window_m": float(window_m),
         "pace_min_per_km": float(best_pace),
+        "ef": None if np.isnan(ef_val) else float(ef_val), # <-- Injected EF Calculation
         "start_time": best_start_time,
         "end_time": best_end_time,
     }
@@ -1409,6 +1428,10 @@ def distance_splits(df: pd.DataFrame, split_m: float) -> pd.DataFrame:
             cad_mean = seg["cadence"].mean()
             if pd.notna(cad_mean):
                 avg_cadence = float(cad_mean)
+
+        # Inject explicit EF Calculation for this kilometer split
+        ef_val = efficiency_index(seg, moving=True)
+        ef = None if np.isnan(ef_val) else float(ef_val)
         # ------------------------------------------------------------------------
 
         # Fallback for TIME_FMT if not globally defined, though your script likely has it
@@ -1426,6 +1449,7 @@ def distance_splits(df: pd.DataFrame, split_m: float) -> pd.DataFrame:
                 "avg_pace_min_per_km": float(avg_pace),
                 "avg_hr_bpm": avg_hr,           # <-- Injected directly into the JSON record
                 "avg_cadence_spm": avg_cadence, # <-- Injected directly into the JSON record
+                "ef": ef,
                 "start_time": st_str,
                 "end_time": et_str,
             }
@@ -1485,7 +1509,7 @@ def compute_performance_stats(df: pd.DataFrame, tz_name=DEFAULT_TIMEZONE) -> dic
                 # Safely extract the new sensor data
                 "avg_hr_bpm": float(row["avg_hr_bpm"]) if "avg_hr_bpm" in row and pd.notna(row["avg_hr_bpm"]) else None,
                 "avg_cadence_spm": float(row["avg_cadence_spm"]) if "avg_cadence_spm" in row and pd.notna(row["avg_cadence_spm"]) else None,
-                
+                "ef": float(row["ef"]) if "ef" in row and pd.notna(row["ef"]) else None, # <-- Safely extract EF
                 "start_time": str(row["start_time"]),
                 "end_time": str(row["end_time"]),
             }
