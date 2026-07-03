@@ -193,6 +193,9 @@ export default function PerformanceStats({ performance, activeHighlight, setActi
                               val = parseFloat(val).toFixed(2);
                           } else if (typeof val === 'number') {
                               val = Number.isInteger(val) ? val : parseFloat(val.toFixed(2));
+                          } else {
+                              console.log('PerformanceStats headerLower:', headerLower);
+                              console.log('PerformanceStats val:', val);
                           }
 
                           return <td key={header} className="px-3 py-2 font-medium">{val !== null ? val : '-'}</td>;
