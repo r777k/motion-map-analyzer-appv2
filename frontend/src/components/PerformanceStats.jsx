@@ -191,11 +191,13 @@ export default function PerformanceStats({ performance, activeHighlight, setActi
                           } else if (headerLower === "ef" && val !== null) {
                               // FIXED: explicitly target EF format styling (limit to 2 decimals)
                               val = parseFloat(val).toFixed(2);
+                              console.log('PerformanceStats ef headerLower:', headerLower);
+                              console.log('PerformanceStats ef val:', val);
                           } else if (typeof val === 'number') {
                               val = Number.isInteger(val) ? val : parseFloat(val.toFixed(2));
                           } else {
-                              console.log('PerformanceStats headerLower:', headerLower);
-                              console.log('PerformanceStats val:', val);
+                              console.log('PerformanceStats else headerLower:', headerLower);
+                              console.log('PerformanceStats else val:', val);
                           }
 
                           return <td key={header} className="px-3 py-2 font-medium">{val !== null ? val : '-'}</td>;
