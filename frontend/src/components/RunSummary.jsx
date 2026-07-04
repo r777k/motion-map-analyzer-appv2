@@ -83,7 +83,7 @@ export default function RunSummary({ summary, metrics, theme }) {
           const label = type.charAt(0).toUpperCase() + type.slice(1);
 
           return (
-            <div key={type} className={`flex justify-between items-center px-3 py-2 rounded-lg border shadow-sm transition-colors ${
+            <div key={type} className={`flex justify-between items-center px-3 py-1 rounded-lg border shadow-sm transition-colors ${
               isDark ? 'bg-slate-900 border-slate-800 hover:bg-slate-800' : 'bg-white border-slate-200 hover:bg-slate-50'
             }`}>
               <span className={`text-[11px] font-black flex items-center tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
