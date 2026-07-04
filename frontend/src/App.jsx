@@ -14,6 +14,7 @@ import ElevationProfile from './components/ElevationProfile';
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 function App() {
+  // --- CORE WORKSPACE STATE ---
   const [file, setFile] = useState(null);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -24,6 +25,7 @@ function App() {
   const [isDraggingSplitter, setIsDraggingSplitter] = useState(false);
   const [theme, setTheme] = useState('light');
 
+  // --- OAUTH & SESSION STATE ---
   const [userToken, setUserToken] = useState(localStorage.getItem('motion_map_token') || null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authEmail, setAuthEmail] = useState('');
@@ -33,13 +35,14 @@ function App() {
   const [authError, setAuthError] = useState(null);
   const [sessionExpired, setSessionExpired] = useState(false); 
 
-  const [activeSidebarTab, setActiveSidebarTab] = useState('upload'); 
+  // --- NAVIGATION & FEED STATE ---
   const [historyItems, setHistoryItems] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [historySortBy, setHistorySortBy] = useState('date_desc'); 
   const [stravaFeedItems, setStravaFeedItems] = useState([]);
 
+  // --- MOBILE SPA STATE ---
   const [mobileTab, setMobileTab] = useState('summary'); 
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(true); 
 
@@ -52,21 +55,38 @@ function App() {
 
   const [activeHighlight, setActiveHighlight] = useState(null);
 
-  useEffect(() => { if (window.innerWidth < 1024) setMapConfig(prev => ({ ...prev, thickness: 'thin' })); }, []);
-  useEffect(() => { setMapConfig(prev => ({ ...prev, baseMap: theme === 'dark' ? 'Dark' : 'Standard' })); }, [theme]);
+  // Responsive defaults
+  useEffect(() => {
+    if (window.innerWidth < 1024) setMapConfig(prev => ({ ...prev, thickness: 'thin' }));
+  }, []);
 
+  useEffect(() => {
+    setMapConfig(prev => ({ ...prev, baseMap: theme === 'dark' ? 'Dark' : 'Standard' }));
+  }, [theme]);
+
+  // --- AUTHENTICATION & API HOOKS ---
   const handleLogout = (isTimeout = false) => {
-    localStorage.removeItem('motion_map_token'); setUserToken(null); 
-    handleCloseRun(); setHistoryItems([]); setStravaFeedItems([]); setSessionExpired(isTimeout === true);
+    localStorage.removeItem('motion_map_token');
+    setUserToken(null); 
+    handleCloseRun();
+    setHistoryItems([]);
+    setStravaFeedItems([]);
+    setSessionExpired(isTimeout === true);
   };
 
   const fetchUserHistoryList = async (tokenOverride = null) => {
-    const activeToken = tokenOverride || userToken; if (!activeToken) return;
+    const activeToken = tokenOverride || userToken;
+    if (!activeToken) return;
     setHistoryLoading(true);
     try {
       const res = await axios.get(`${API_BASE}/api/activities`, { headers: { Authorization: `Bearer ${activeToken}` } });
-      setHistoryItems(res.data.history || []); setSessionExpired(false);
-    } catch (err) { if (err.response?.status === 401) handleLogout(true); } finally { setHistoryLoading(false); }
+      setHistoryItems(res.data.history || []);
+      setSessionExpired(false);
+    } catch (err) {
+      if (err.response?.status === 401) handleLogout(true);
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -78,28 +98,37 @@ function App() {
     }
   }, [userToken]);
 
+  // Strava OAuth Exchange Hook
   useEffect(() => {
     const stravaCode = new URLSearchParams(window.location.search).get("code");
     if (stravaCode) {
-      setLoading(true); window.history.replaceState({}, document.title, window.location.pathname);
+      setLoading(true);
+      window.history.replaceState({}, document.title, window.location.pathname);
       axios.post(`${API_BASE}/api/auth/strava/exchange`, { code: stravaCode }, { headers: userToken ? { Authorization: `Bearer ${userToken}` } : {} })
       .then((res) => {
         if (res.data && res.data.access_token) {
-          localStorage.setItem('motion_map_token', res.data.access_token); setUserToken(res.data.access_token);
-          setSessionExpired(false); fetchUserHistoryList(res.data.access_token);
+          localStorage.setItem('motion_map_token', res.data.access_token);
+          setUserToken(res.data.access_token);
+          setSessionExpired(false);
+          fetchUserHistoryList(res.data.access_token);
         }
-      }).catch(() => setError("Failed to verify Strava linkage.")).finally(() => setLoading(false));
+      }).catch(() => setError("Failed to verify credentials linkage with Strava.")).finally(() => setLoading(false));
     }
   }, []);
 
   const handleLoadStravaActivity = async (id) => {
-    if (!userToken) return; setLoading(true); setError(null);
+    if (!userToken) return;
+    setLoading(true); setError(null);
     try {
       const res = await axios.get(`${API_BASE}/api/strava/analyze-activity/${id}`, { headers: { Authorization: `Bearer ${userToken}` } });
       setData(res.data.data);
-    } catch (err) { setError("Failed to download telemetry."); if (err.response?.status === 401) handleLogout(true); } finally { setLoading(false); }
+    } catch (err) {
+      setError("Failed to download telemetry from Strava.");
+      if (err.response?.status === 401) handleLogout(true);
+    } finally { setLoading(false); }
   };
 
+  // Splitter Drag Logic
   useEffect(() => {
     if (!isDraggingSplitter) return;
     const handleMouseMove = (e) => setSidebarWidth(Math.max(350, Math.min(750, e.clientX)));
@@ -108,126 +137,404 @@ function App() {
     return () => { document.removeEventListener('mousemove', handleMouseMove); document.removeEventListener('mouseup', handleMouseUp); };
   }, [isDraggingSplitter]);
 
-  const handleFileChange = (e) => { setFile(e.target.files[0]); setData(null); };
+  const handleFileChange = (e) => {
+    setFile(e.target.files[0]);
+    setData(null);
+  };
+
   const handleCloseRun = () => { setData(null); setFile(null); setError(null); setActiveHighlight(null); setHoveredTrackpoint(null); };
 
   const handleLoadSavedActivity = async (id) => {
-    if (!userToken) return; setLoading(true); setError(null);
+    if (!userToken) return;
+    setLoading(true); setError(null);
     try {
       const res = await axios.get(`${API_BASE}/api/activities/${id}`, { headers: { Authorization: `Bearer ${userToken}` } });
       setData({ ...res.data.data, id });
-    } catch (err) { setError("Failed to stream saved profile."); if (err.response?.status === 401) handleLogout(true); } finally { setLoading(false); }
+    } catch (err) {
+      setError("Failed to stream saved profile.");
+      if (err.response?.status === 401) handleLogout(true);
+    } finally { setLoading(false); }
   };
 
   const handleSaveCurrentRun = async () => {
     if (!data || !userToken) return;
     try {
       const res = await axios.post(`${API_BASE}/api/activities`, { summary: data.summary, segments: data.segments, trackpoints: data.trackpoints, performance: data.performance || {}, metrics: data.metrics || {} }, { headers: { Authorization: `Bearer ${userToken}` } });
-      if (res.data?.activity_id) setData(prev => ({ ...prev, id: res.data.activity_id })); fetchUserHistoryList(userToken);
-    } catch (err) { alert("Failed to pin active workout."); if (err.response?.status === 401) handleLogout(true); }
+      if (res.data?.activity_id) setData(prev => ({ ...prev, id: res.data.activity_id }));
+      fetchUserHistoryList(userToken);
+    } catch (err) {
+      alert("Failed to pin active workout.");
+      if (err.response?.status === 401) handleLogout(true);
+    }
   };
 
   const handleDeleteSavedRun = async (e, id) => {
-    e.stopPropagation(); if (!window.confirm("Delete this log?")) return;
+    e.stopPropagation(); 
+    if (!window.confirm("Delete this log?")) return;
     try {
       await axios.delete(`${API_BASE}/api/activities/${id}`, { headers: { Authorization: `Bearer ${userToken}` } });
-      setHistoryItems(prev => prev.filter(item => item.id !== id)); if (data && data.id === id) handleCloseRun();
-    } catch (err) { alert("Failed to erase record."); if (err.response?.status === 401) handleLogout(true); }
+      setHistoryItems(prev => prev.filter(item => item.id !== id));
+      if (data && data.id === id) handleCloseRun();
+    } catch (err) {
+      alert("Failed to erase record.");
+      if (err.response?.status === 401) handleLogout(true);
+    }
   };
 
   const handleUpload = async (e) => {
-    e.preventDefault(); if (!file) return; setLoading(true); setError(null);
+    e.preventDefault();
+    if (!file) return;
+    setLoading(true); setError(null);
     const formData = new FormData(); formData.append('file', file); formData.append('apply_privacy', applyPrivacy);
     try {
       const res = await axios.post(`${API_BASE}/api/analyze`, formData, { headers: userToken ? { Authorization: `Bearer ${userToken}` } : {} });
       setData(res.data.data);
-    } catch (err) { setError(err.response?.data?.detail || "Connection error."); if (err.response?.status === 401) handleLogout(true); } finally { setLoading(false); }
+    } catch (err) {
+      setError(err.response?.data?.detail || "Connection error.");
+      if (err.response?.status === 401) handleLogout(true);
+    } finally { setLoading(false); }
   };
 
   const handleRequestOTP = async (e) => {
-    e.preventDefault(); if (!authEmail) return; setAuthLoading(true); setAuthError(null);
-    try { await axios.post(`${API_BASE}/api/auth/send-otp`, { email: authEmail }); setAuthStep(2); } catch (err) { setAuthError("Failed to trigger mailing service."); } finally { setAuthLoading(false); }
+    e.preventDefault();
+    if (!authEmail) return;
+    setAuthLoading(true); setAuthError(null);
+    try { 
+      await axios.post(`${API_BASE}/api/auth/send-otp`, { email: authEmail }); 
+      setAuthStep(2); 
+    } catch (err) { 
+      setAuthError(err.response?.data?.detail || "Failed to trigger mailing service.");  
+    } finally { 
+      setAuthLoading(false); 
+    }
   };
 
   const handleVerifyOTP = async (e) => {
-    e.preventDefault(); if (!authOTP || authOTP.length < 6) return; setAuthLoading(true); setAuthError(null);
+    e.preventDefault();
+    if (!authOTP || authOTP.length < 6) return;
+    setAuthLoading(true); setAuthError(null);
     try {
       const res = await axios.post(`${API_BASE}/api/auth/verify-otp`, { email: authEmail, code: authOTP });
-      localStorage.setItem('motion_map_token', res.data.access_token); setUserToken(res.data.access_token);
-      setAuthModalOpen(false); setSessionExpired(false); setAuthEmail(''); setAuthOTP(''); setAuthStep(1); fetchUserHistoryList(res.data.access_token);
-    } catch (err) { setAuthError("Invalid authorization code."); } finally { setAuthLoading(false); }
+      localStorage.setItem('motion_map_token', res.data.access_token);
+      setUserToken(res.data.access_token);
+      setAuthModalOpen(false); setSessionExpired(false); setAuthEmail(''); setAuthOTP(''); setAuthStep(1);
+      fetchUserHistoryList(res.data.access_token);
+    } catch (err) { 
+      setAuthError(err.response?.data?.detail || "Invalid authorization code.");
+    } finally { 
+      setAuthLoading(false); 
+    }
   };
 
+  const handleDemoTryout = async () => {
+    setLoading(true); setError(null);
+    try {
+      const res = await fetch('/demo.tcx');
+      const blob = await res.blob();
+      const formData = new FormData(); formData.append('file', new File([blob], 'demo.tcx')); formData.append('apply_privacy', applyPrivacy);
+      const output = await axios.post(`${API_BASE}/api/analyze`, formData, { headers: userToken ? { Authorization: `Bearer ${userToken}` } : {} });
+      setData(output.data.data);
+    } catch (err) { 
+      setError("Failed to load built-in demo."); 
+    } finally { 
+      setLoading(false); 
+    }
+  };
+
+  // --- EXPORT & SHARE FUNCTIONS ---
   const exportToCSV = () => {
     if (!data) return;
-    let csvContent = ""; const appendHeader = (title) => { csvContent += `\n# --------------------------------------------------\n# ${title.toUpperCase()}\n# --------------------------------------------------\n`; };
+    let csvContent = "";
+    const appendHeader = (title) => { csvContent += `\n# --------------------------------------------------\n# ${title.toUpperCase()}\n# --------------------------------------------------\n`; };
+    
     appendHeader("Run Summary Overview"); csvContent += "Metric,Value\n";
     if (data.summary) Object.entries(data.summary).forEach(([k, v]) => { if (typeof v !== 'object') csvContent += `"${k.replace(/_/g, ' ')}","${v}"\n`; });
+    
     if (data.performance) {
-      const p = data.performance; const rollingKey = Object.keys(p).find(k => k.includes("rolling") || k.includes("best"));
-      if (rollingKey && p[rollingKey]?.length > 0) { appendHeader("Best Rolling Intervals Data"); const headers = Object.keys(p[rollingKey][0]); csvContent += headers.join(",") + "\n"; p[rollingKey].forEach(row => { csvContent += headers.map(h => `"${row[h] ?? '-'}"`).join(",") + "\n"; }); }
-      if (p.km_splits?.length > 0) { appendHeader("Km Performance Splits"); const headers = Object.keys(p.km_splits[0]); csvContent += headers.join(",") + "\n"; p.km_splits.forEach(row => { csvContent += headers.map(h => `"${row[h] ?? '-'}"`).join(",") + "\n"; }); }
-      ['hr_bands', 'cadence_bands'].forEach(zoneKey => { if (p[zoneKey]?.length > 0) { appendHeader(zoneKey.replace(/_/g, ' ')); const headers = Object.keys(p[zoneKey][0]); csvContent += headers.join(",") + "\n"; p[zoneKey].forEach(row => { csvContent += headers.map(h => `"${row[h] ?? '-'}"`).join(",") + "\n"; }); } });
+      const p = data.performance;
+      const rollingKey = Object.keys(p).find(k => k.includes("rolling") || k.includes("best"));
+      if (rollingKey && p[rollingKey]?.length > 0) {
+        appendHeader("Best Rolling Intervals Data");
+        const headers = Object.keys(p[rollingKey][0]); csvContent += headers.join(",") + "\n";
+        p[rollingKey].forEach(row => { csvContent += headers.map(h => `"${row[h] ?? '-'}"`).join(",") + "\n"; });
+      }
+      if (p.km_splits?.length > 0) {
+        appendHeader("Km Performance Splits");
+        const headers = Object.keys(p.km_splits[0]); csvContent += headers.join(",") + "\n";
+        p.km_splits.forEach(row => { csvContent += headers.map(h => `"${row[h] ?? '-'}"`).join(",") + "\n"; });
+      }
+      ['hr_bands', 'cadence_bands'].forEach(zoneKey => {
+        if (p[zoneKey]?.length > 0) {
+          appendHeader(zoneKey.replace(/_/g, ' '));
+          const headers = Object.keys(p[zoneKey][0]); csvContent += headers.join(",") + "\n";
+          p[zoneKey].forEach(row => { csvContent += headers.map(h => `"${row[h] ?? '-'}"`).join(",") + "\n"; });
+        }
+      });
     }
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a"); link.setAttribute("href", URL.createObjectURL(blob));
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a"); link.setAttribute("href", URL.createObjectURL(blob));
     link.setAttribute("download", `MotionMap_Export_${data.summary?.start_time?.split(' ')[0] || 'Run'}.csv`);
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
   const captureVisualSnapshot = async () => {
-    if (!data) return; const originalText = document.title; document.title = "Generating Card Asset...";
+    if (!data) return;
+    const originalText = document.title; document.title = "Generating Card Asset...";
     try {
-      const res = await axios.post(`${API_BASE}/api/export-snapshot`, { summary: data.summary, segments: data.segments, trackpoints: data.trackpoints, performance: data.performance, config: { theme, overlayMetric: mapConfig.overlayMetric, colorScale: mapConfig.colorScale, thickness: mapConfig.thickness } }, { responseType: 'blob' });
+      const res = await axios.post(`${API_BASE}/api/export-snapshot`, { 
+        summary: data.summary, segments: data.segments, trackpoints: data.trackpoints, performance: data.performance, 
+        config: { theme, overlayMetric: mapConfig.overlayMetric, colorScale: mapConfig.colorScale, thickness: mapConfig.thickness } 
+      }, { responseType: 'blob' });
       const downloadAnchor = document.createElement('a'); downloadAnchor.href = window.URL.createObjectURL(new Blob([res.data], { type: 'image/png' }));
       downloadAnchor.download = `MotionMap_Card_${data.summary?.start_time?.split(' ')[0] || 'Run'}.png`;
       document.body.appendChild(downloadAnchor); downloadAnchor.click(); document.body.removeChild(downloadAnchor);
-    } catch (err) { alert("Failed to compile image card asset."); } finally { document.title = originalText; }
+    } catch (err) { 
+      alert("Failed to compile image card asset."); 
+    } finally { 
+      document.title = originalText; 
+    }
   };
 
-  const renderAppFeatureDescriptionsGrid = () => (
-    <div className="space-y-4 w-full mt-4">
-      <h2 className="text-xs font-black uppercase tracking-wider flex items-center opacity-80"><Sparkles className="w-4 h-4 mr-1.5 text-blue-500" /> Quick Start & Feature Highlights</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-        <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}><h3 className="text-xs font-black uppercase tracking-wider text-blue-500 mb-1">📁 Multi-Format Activity Import</h3><p className="text-xs text-slate-400 leading-normal font-medium">Upload .FIT or .TCX files, or connect to Strava to access your activities.</p></div>
-        <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}><h3 className="text-xs font-black uppercase tracking-wider text-emerald-500 mb-1">🔒 Smart Privacy Masking</h3><p className="text-xs text-slate-400 leading-normal font-medium">Keeps sensitive locations private when sharing; by clipping the start and end, 500m, of your route.</p></div>
-        <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}><h3 className="text-xs font-black uppercase tracking-wider text-purple-500 mb-1">📊 Deep Workout Analytics</h3><p className="text-xs text-slate-400 leading-normal font-medium">Track peak rolling intervals (400m, 1K, 5K), km splits, and aerobic efficiency (EF).</p></div>
-        <div className={`p-4 rounded-xl border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800/80' : 'bg-white border-slate-200/80 shadow-xs'}`}><h3 className="text-xs font-black uppercase tracking-wider text-amber-500 mb-1">👁️ Activity Insights Map</h3><p className="text-xs text-slate-400 leading-normal font-medium">Map your run with precision - track exactly where your heart rate peaked, cadence dropped, and pace shifted.</p></div>
+  // --- HELPER FORMATTERS ---
+  const renderFormattedDuration = (seconds) => {
+    const h = Math.floor(seconds / 3600), m = Math.floor((seconds % 3600) / 60), s = seconds % 60;
+    return h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`;
+  };
+
+  const convertPaceToSeconds = (paceStr) => {
+    if (!paceStr || !paceStr.includes(':')) return 999999;
+    const parts = paceStr.split(':'); return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+  };
+
+  const filteredHistory = historyItems
+    .filter(item => !historySearchQuery || (item.location_city || '').toLowerCase().includes(historySearchQuery.toLowerCase()))
+    .sort((a, b) => {
+      if (historySortBy === 'date_desc') return new Date(b.start_time) - new Date(a.start_time);
+      if (historySortBy === 'distance_desc') return (b.distance_km || 0) - (a.distance_km || 0);
+      if (historySortBy === 'pace_asc') return convertPaceToSeconds(a.avg_pace_str) - convertPaceToSeconds(b.avg_pace_str);
+      return 0;
+    });
+
+  const cumulativeDistance = historyItems.reduce((acc, curr) => acc + (curr.distance_km || 0), 0);
+  const cumulativeDuration = historyItems.reduce((acc, curr) => acc + (curr.duration_s || 0), 0);
+
+  // --- UI COMPONENTS ---
+  const authModalDialogMarkup = authModalOpen && (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-[9000] p-4 animate-fadeIn">
+      <div className={`max-w-md w-full rounded-2xl border p-6 shadow-2xl relative ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+        <button onClick={() => { setAuthModalOpen(false); setAuthStep(1); setAuthError(null); }} className="absolute top-4 right-4 p-1.5 rounded-lg border dark:border-slate-800"><X className="w-4 h-4" /></button>
+        <div className="flex flex-col items-center text-center space-y-3">
+          <div className={`p-3 rounded-full ${theme === 'dark' ? 'bg-slate-950 text-blue-400' : 'bg-blue-50 text-blue-600'}`}><KeyRound className="w-6 h-6" /></div>
+          <div>
+            <h3 className="text-sm font-black uppercase tracking-wider">Zero-Knowledge Access</h3>
+            <p className="text-xs text-slate-400 mt-1 leading-normal">Your email profile is instantly converted to a blind cryptographic signature hash before database storage lookups.</p>
+          </div>
+        </div>
+        {authStep === 1 ? (
+          <form onSubmit={handleRequestOTP} className="mt-5 space-y-4">
+            <input type="email" required placeholder="runner@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className={`w-full px-4 py-2.5 rounded-xl text-xs font-bold border outline-none ${theme === 'dark' ? 'bg-slate-950 border-slate-800 focus:border-blue-500' : 'bg-slate-50 border-slate-200 focus:bg-white'}`} />
+            <button type="submit" disabled={authLoading} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md">{authLoading ? "Issuing Token..." : "Send Security Code"}</button>
+          </form>
+        ) : (
+          <form onSubmit={handleVerifyOTP} className="mt-5 space-y-4">
+            <input type="text" required maxLength={6} placeholder="000000" value={authOTP} onChange={(e) => setAuthOTP(e.target.value.replace(/\D/g, ''))} className="w-full tracking-[0.5em] text-center py-2.5 rounded-xl text-sm font-black border dark:bg-slate-950 dark:border-slate-800" />
+            <button type="submit" disabled={authLoading} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md">Verify & Log In</button>
+          </form>
+        )}
+        {authError && <div className="mt-3 p-2.5 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-xs font-bold text-center">{authError}</div>}
       </div>
-      <div className={`p-4 rounded-xl border text-xs leading-relaxed font-medium ${theme === 'dark' ? 'bg-slate-900/20 border-slate-800/60 text-slate-400' : 'bg-slate-100/60 border-slate-200 text-slate-500'}`}><span className="font-black text-slate-700 dark:text-slate-200 block mb-1">🛡️ Privacy Isolation Guard:</span> Your workouts are processed in secure, temporary memory. For saved history, emails are converted into irreversible cryptographic signatures—so your identity and location stay protected. Your email is never stored!</div>
     </div>
   );
 
+  // ---------------------------------------------------------------------------
+  // NEW DASHBOARD LANDING ARCHITECTURE (UNIFIED MULTI-COLUMN)
+  // ---------------------------------------------------------------------------
   if (!data) {
     return (
-      <div className={`min-h-screen flex flex-col items-center justify-center p-4 md:p-8 relative ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
+      <div className={`min-h-screen flex flex-col items-center p-4 md:p-8 relative ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
+        
+        {/* Absolute Floating Control Header */}
         <div className="absolute top-4 right-4 flex items-center space-x-2 z-50">
-          {userToken ? <button onClick={() => handleLogout(false)} className="p-2 rounded-xl bg-red-500/10 text-red-500 border border-red-500/10"><LogOut className="w-4 h-4" /></button> : <button onClick={() => setAuthModalOpen(true)} className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-xl border flex items-center space-x-1.5 ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}><LogIn className="w-3.5 h-3.5" /> <span>Sign In</span></button>}
+          {userToken ? (
+            <button onClick={() => handleLogout(false)} className="p-2 rounded-xl bg-red-500/10 text-red-500 border border-red-500/10"><LogOut className="w-4 h-4" /></button>
+          ) : (
+            <button onClick={() => { setAuthModalOpen(true); setAuthError(null); }} className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-xl border flex items-center space-x-1.5 ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}><LogIn className="w-3.5 h-3.5" /> <span>Sign In</span></button>
+          )}
           <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="p-2 rounded-xl border dark:border-slate-800">{theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-500" />}</button>
         </div>
-        <header className="flex flex-col items-center mb-6 text-center select-none flex-shrink-0"><img src="/logo.png" alt="Logo" className="w-16 h-16 mb-2 drop-shadow-md" /><h1 className="text-2xl font-black tracking-tight">Motion Map Analyzer</h1><p className="text-[10px] font-black uppercase tracking-widest opacity-40 mt-0.5">Interactive Multi-Stream Telemetry Dashboard</p></header>
-        <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-start"><div className="lg:col-span-7 space-y-5">{renderAppFeatureDescriptionsGrid()}</div></div>
+
+        <header className="flex flex-col items-center mb-6 mt-4 text-center select-none flex-shrink-0">
+          <img src="/logo.png" alt="Logo" className="w-16 h-16 mb-2 drop-shadow-md" />
+          <h1 className="text-2xl font-black tracking-tight">Motion Map Analyzer</h1>
+          <p className="text-[10px] font-black uppercase tracking-widest opacity-40 mt-0.5">Interactive Multi-Stream Telemetry Dashboard</p>
+        </header>
+
+        {sessionExpired && (
+          <div className="w-full max-w-md mb-4 p-3 rounded-xl border flex items-center space-x-2.5 bg-red-500/10 border-red-500/20 text-red-500 text-xs font-bold"><AlertTriangle className="w-4 h-4 flex-shrink-0" /><span className="flex-1">Session identity window has closed. Please request a fresh login code link.</span><X className="w-4 h-4 cursor-pointer" onClick={() => setSessionExpired(false)} /></div>
+        )}
+
+        {/* Dashboard Grid Container */}
+        <div className="w-full max-w-[1200px] flex flex-col space-y-6">
+           
+           {/* Section 1: Features Header Block */}
+           <div className={`w-full p-6 rounded-2xl shadow-sm border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <h2 className="text-xs font-black uppercase tracking-wider flex items-center opacity-80 mb-4"><Sparkles className="w-4 h-4 mr-1.5 text-blue-500" /> Quick Start & Feature Highlights</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div><h3 className="text-[11px] font-black uppercase tracking-wider text-blue-500 mb-1">📁 Multi-Format Activity Import</h3><p className="text-xs text-slate-400 leading-normal font-medium">Upload .FIT or .TCX files, or connect to Strava to access your activities.</p></div>
+                <div><h3 className="text-[11px] font-black uppercase tracking-wider text-emerald-500 mb-1">🔒 Smart Privacy Masking</h3><p className="text-xs text-slate-400 leading-normal font-medium">Keeps sensitive locations private when sharing; by clipping the start and end, 500m, of your route.</p></div>
+                <div><h3 className="text-[11px] font-black uppercase tracking-wider text-purple-500 mb-1">📊 Deep Workout Analytics</h3><p className="text-xs text-slate-400 leading-normal font-medium">Track peak rolling intervals (400m, 1K, 5K), km splits, and aerobic efficiency (EF).</p></div>
+                <div><h3 className="text-[11px] font-black uppercase tracking-wider text-amber-500 mb-1">👁️ Activity Insights Map</h3><p className="text-xs text-slate-400 leading-normal font-medium">Map your run with precision - track exactly where your heart rate peaked, cadence dropped, and pace shifted.</p></div>
+              </div>
+              <div className={`mt-5 p-4 rounded-xl border text-xs leading-relaxed font-medium ${theme === 'dark' ? 'bg-slate-900/20 border-slate-800/60 text-slate-400' : 'bg-slate-100/60 border-slate-200 text-slate-500'}`}>
+                <span className="font-black text-slate-700 dark:text-slate-200 block mb-1">🛡️ Privacy Isolation Guard:</span> Your workouts are processed in secure, temporary memory. For saved history, emails are converted into irreversible cryptographic signatures—so your identity and location stay protected. Your email is never stored!
+              </div>
+           </div>
+
+           {/* Section 2: Upload and Data LEDGERS Container */}
+           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch pb-10">
+              
+              {/* Left Column: Dedicated Upload Module */}
+              <div className={`p-6 md:p-8 rounded-2xl shadow-xl border w-full flex flex-col justify-center ${theme === 'dark' ? 'bg-slate-900 border-slate-800/80' : 'bg-white border-slate-200'}`}>
+                <form onSubmit={handleUpload} className="flex flex-col items-center space-y-6">
+                  <div className={`p-4 rounded-full ${theme === 'dark' ? 'bg-slate-950' : 'bg-blue-50'}`}><UploadCloud className={`w-10 h-10 ${theme === 'dark' ? 'text-slate-500' : 'text-blue-500'}`} /></div>
+                  <div className="text-center">
+                    <h2 className="text-sm font-black uppercase tracking-wider">Upload Local File</h2>
+                    <p className="text-xs text-slate-400 mt-1">Drop a high-resolution .tcx or .fit tracking stream asset</p>
+                  </div>
+                  <input type="file" accept=".tcx,.fit" onChange={handleFileChange} className={`text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black w-full cursor-pointer border p-2 rounded-xl ${theme === 'dark' ? 'text-slate-400 border-slate-800 file:bg-slate-800 file:text-slate-200' : 'text-slate-500 border-slate-100 file:bg-blue-50 file:text-blue-700 shadow-inner'}`} />
+                  <div className={`w-full flex items-center justify-between p-3 border rounded-xl relative group ${theme === 'dark' ? 'bg-slate-950/40 border-slate-800' : 'bg-slate-50/50 border-slate-200'}`}>
+                    <label className="flex items-center space-x-2.5 text-xs font-bold cursor-pointer"><input type="checkbox" checked={applyPrivacy} onChange={(e) => setApplyPrivacy(e.target.checked)} className="w-4 h-4 text-blue-600 rounded focus:ring-0" /><span>Enable home obfuscation mask</span></label>
+                    <Info className="w-4 h-4 text-slate-400" />
+                  </div>
+                  <button type="submit" disabled={!file || loading} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs uppercase tracking-wider disabled:opacity-30 shadow-md shadow-blue-600/10">{loading ? 'Executing Engine Models...' : 'Analyze Run Workspace'}</button>
+                  <button type="button" onClick={handleDemoTryout} disabled={loading} className="text-xs text-blue-500 hover:underline font-bold">Launch Built-In Demo Workspace</button>
+                </form>
+                {error && <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-xs font-bold text-center">{error}</div>}
+              </div>
+
+              {/* Right Column: Feeds & Integrations */}
+              <div className="flex flex-col space-y-6 h-full min-h-[500px]">
+                 
+                 {/* Top Half: Active Strava Webhook */}
+                 <div className={`p-6 rounded-2xl shadow-xl border w-full flex-shrink-0 ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+                    <h2 className="text-sm font-black uppercase tracking-wider mb-4 flex items-center text-[#FC6100]">🧡 Connect Strava Profile</h2>
+                    {!userToken ? (
+                      <div className="text-center py-4 text-xs text-slate-400 font-medium">Log in to view synchronized activities.</div>
+                    ) : (
+                      stravaFeedItems.length > 0 ? (
+                        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
+                          {stravaFeedItems.map(act => {
+                            const cleanDate = act.start_date ? act.start_date.split('T')[0] : 'Recent';
+                            const cleanTime = act.start_date ? act.start_date.split('T')[1].substring(0, 5) : '';
+                            return (
+                              <div key={act.id} onClick={() => handleLoadStravaActivity(act.id)} className={`p-3 rounded-xl border cursor-pointer min-w-[165px] text-xs font-bold dark:bg-slate-950 dark:border-slate-800 hover:border-[#FC6100]`}>
+                                <p className="truncate opacity-90 text-slate-800 dark:text-slate-200">{act.name}</p>
+                                <p className="text-[10px] font-medium text-slate-400 mt-0.5">🗓️ {cleanDate} <span className="opacity-60 font-normal ml-0.5">{cleanTime}</span></p>
+                                <div className="flex justify-between text-[10px] mt-2.5 text-blue-500 font-black"><span>{act.distance_km} km</span><span className="text-slate-400 font-normal">⏱️ {Math.floor(act.duration_s / 60)}m</span></div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-center">
+                           <button type="button" disabled={loading} onClick={() => { window.location.href = `https://www.strava.com/oauth/authorize?client_id=${import.meta.env.VITE_STRAVA_CLIENT_ID || '260297'}&response_type=code&redirect_uri=${encodeURIComponent(FRONTEND_URL)}&approval_prompt=auto&scope=activity:read_all`; }} className="px-4 py-2.5 bg-[#FC6100] text-white text-xs font-black rounded-xl shadow-md border-0 w-full">Authenticate via Strava OAuth</button>
+                        </div>
+                      )
+                    )}
+                 </div>
+
+                 {/* Bottom Half: Cloud Ledger History */}
+                 <div className={`p-6 rounded-2xl shadow-xl border w-full flex-1 flex flex-col ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+                    <h2 className="text-sm font-black uppercase tracking-wider mb-4 flex justify-between items-center"><span>🗂️ Cloud History Feed</span></h2>
+                    {!userToken ? (
+                      <div className="text-center py-10 flex-1 flex items-center justify-center text-xs text-slate-400 font-medium">Authentication required to view cloud history.</div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-3 gap-3 mb-4 p-3 rounded-xl border dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 text-center">
+                          <div><p className="text-[9px] font-bold uppercase text-slate-400">Total Distance</p><p className="text-sm font-black text-blue-500">{cumulativeDistance.toFixed(1)} km</p></div>
+                          <div><p className="text-[9px] font-bold uppercase text-slate-400">Moving Time</p><p className="text-sm font-black text-purple-500 truncate">{renderFormattedDuration(cumulativeDuration)}</p></div>
+                          <div><p className="text-[9px] font-bold uppercase text-slate-400">Logs Saved</p><p className="text-sm font-black text-emerald-500">{historyItems.length}</p></div>
+                        </div>
+                        <div className="flex gap-2 mb-4">
+                          <input type="text" placeholder="Filter by city location..." value={historySearchQuery} onChange={(e) => setHistorySearchQuery(e.target.value)} className={`flex-1 px-3 py-2 rounded-xl text-xs font-bold border outline-none ${theme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`} />
+                          <select value={historySortBy} onChange={(e) => setHistorySortBy(e.target.value)} className="px-2 py-2 rounded-xl text-xs font-bold border dark:bg-slate-950 dark:border-slate-800"><option value="date_desc">Newest</option><option value="distance_desc">Distance</option></select>
+                        </div>
+                        <div className="flex-1 h-[250px] overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
+                          {historyLoading ? (
+                            <div className="text-center py-6 text-xs text-slate-400 font-bold">Streaming Neon Ledger Rows...</div>
+                          ) : filteredHistory.length === 0 ? (
+                            <div className="text-center py-8 text-xs text-slate-400 font-medium border border-dashed rounded-xl dark:border-slate-800">No workout matches found.</div>
+                          ) : (
+                            filteredHistory.map(item => (
+                              <div key={item.id} onClick={() => handleLoadSavedActivity(item.id)} className={`p-3 rounded-xl border cursor-pointer flex justify-between items-center group text-xs font-bold dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 hover:border-blue-500`}>
+                                <div>
+                                  <div className="flex items-center space-x-1.5 truncate"><Calendar className="w-3 h-3 text-blue-500" /><span>{item.start_time.split(' ')[0]}</span><span className="opacity-40 text-[10px] truncate max-w-[120px]">{item.location_city || 'Local Route'}</span></div>
+                                  <div className="flex items-center space-x-3 text-[11px] mt-1.5"><span className="text-blue-500 font-black">{item.distance_km?.toFixed(2)} km</span><span className="text-slate-400">⏱️ {renderFormattedDuration(item.duration_s)}</span></div>
+                                </div>
+                                <button onClick={(e) => handleDeleteSavedRun(e, item.id)} className="p-1 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </>
+                    )}
+                 </div>
+              </div>
+           </div>
+        </div>
+        {authModalDialogMarkup}
       </div>
     );
   }
 
-  // FIXED #11: "overscroll-none" added to the root block prevents mobile pull-to-refresh resets
+  const isOverlayFilterApplied = mapConfig.overlayMetric !== 'None' || activeHighlight !== null || Object.values(mapConfig.motionTypes).includes(false);
+
+  // ---------------------------------------------------------------------------
+  // MAIN APPLICATION VIEWER (DESKTOP & MOBILE SPA)
+  // ---------------------------------------------------------------------------
   return (
     <div className={`flex h-screen w-full overflow-hidden font-sans select-none transition-colors duration-200 overscroll-none touch-pan-x touch-pan-y ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
       
-      {/* 💻 DESKTOP LAYOUT (Unchanged) */}
+      {/* 💻 DESKTOP DUAL CANVAS LAYOUT */}
       <div className="hidden lg:flex h-full w-full overflow-hidden flex-row">
-        {/* ... desktop sidebar code ... */}
+        <div style={{ width: `${sidebarWidth}px` }} className={`flex-shrink-0 h-full overflow-y-auto p-5 shadow-sm flex flex-col space-y-6 border-r ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800' : 'bg-slate-50/50 border-slate-200'}`}>
+          <header className="pb-4 border-b flex justify-between items-start flex-shrink-0 dark:border-slate-800">
+            <div>
+              <h1 className="text-base font-black tracking-tight flex items-center space-x-2"><img src="/logo.png" alt="Logo" className="w-5 h-5" /><span>Motion Map Analyzer</span></h1>
+              <div className="flex items-center space-x-1.5 mt-2.5">
+                <button onClick={exportToCSV} className="px-2 py-1 text-[10px] font-bold rounded border dark:border-slate-700 bg-transparent"><Download className="w-3 h-3 inline mr-1" />Export CSV</button>
+                <button onClick={captureVisualSnapshot} className="px-2 py-1 text-[10px] font-bold rounded border dark:border-slate-700 bg-transparent"><Camera className="w-3 h-3 inline mr-1" />Share Card</button>
+                {userToken && data.summary?.start_time && (data.id ? <span className="px-2 py-1 text-[10px] font-black bg-emerald-600/10 text-emerald-500 rounded border border-emerald-500/10">✓ Synced Cloud Log</span> : <button onClick={handleSaveCurrentRun} className="px-2 py-1 text-[10px] font-black bg-blue-600 hover:bg-blue-700 text-white rounded shadow-sm">💾 Save to Account</button>)}
+              </div>
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="p-1.5 rounded-lg border dark:border-slate-700"><Sun className="w-3.5 h-3.5 hidden dark:block text-amber-400" /><Moon className="w-3.5 h-3.5 block dark:hidden text-slate-500" /></button>
+              <button onClick={handleCloseRun} className="p-1.5 rounded-lg border dark:border-slate-700"><X className="w-3.5 h-3.5" /></button>
+            </div>
+          </header>
+          <div className="flex-1 space-y-6">
+            <RunSummary summary={data.summary} metrics={data.metrics} theme={theme} />
+            <MapControls config={mapConfig} setConfig={setMapConfig} segments={data.segments} trackpoints={data.trackpoints} activeHighlight={activeHighlight} setActiveHighlight={setActiveHighlight} theme={theme} />
+            <PerformanceStats performance={data.performance} activeHighlight={activeHighlight} setActiveHighlight={setActiveHighlight} theme={theme} />
+          </div>
+        </div>
+        <div onMouseDown={() => setIsDraggingSplitter(true)} className="w-1 h-full cursor-col-resize flex-shrink-0 bg-slate-200 dark:bg-slate-800 hover:bg-blue-500 transition-colors" />
         <div className="flex-1 h-full p-4 flex flex-col space-y-4 overflow-hidden min-w-0">
            <div className="flex-1 w-full relative rounded-xl overflow-hidden shadow-xs border dark:border-slate-800">
               {data.trackpoints && <RouteMap segments={data.segments} trackpoints={data.trackpoints} config={mapConfig} splits={data.performance?.km_splits} activeHighlight={activeHighlight} hoveredTrackpoint={hoveredTrackpoint} setActiveHighlight={setActiveHighlight} theme={theme} />}
            </div>
+           <div className="w-full flex-shrink-0 flex flex-col space-y-2">
+              {data.trackpoints && <ElevationProfile trackpoints={data.trackpoints} segments={data.segments} config={mapConfig} activeHighlight={activeHighlight} setActiveHighlight={setActiveHighlight} setHoveredTrackpoint={setHoveredTrackpoint} theme={theme} />}
+              <div className="text-center w-full select-none pb-0.5 opacity-40 text-[9px] font-bold">
+                ⚠️ Motion segmentation and metrics are computational models. Coordinates match tracking centers but may vary from localized hardware records.
+              </div>
+           </div>
         </div>
       </div>
 
-      {/* 📱 MOBILE SPA LAYOUT */}
+      {/* 📱 PORTRAIT TOUCH-OPTIMIZED WEB SPA VIEWPORT LAYOUT */}
       <div className="flex lg:hidden h-screen w-full flex-col relative overflow-hidden bg-slate-50 dark:bg-slate-950 overscroll-none">
          
-         {/* FIXED #7 & #10: Lighter translucent background for logo + Added Camera Export icon */}
          <div className="absolute top-3 left-3 right-3 z-50 flex items-center justify-between pointer-events-none">
             <div className="p-1.5 px-2.5 bg-white/80 dark:bg-slate-900/80 text-slate-900 dark:text-slate-100 rounded-lg shadow-sm border border-slate-200/50 dark:border-slate-700/50 flex items-center space-x-2 pointer-events-auto select-none backdrop-blur-md">
                <img src="/logo.png" alt="Logo" className="w-4 h-4 flex-shrink-0" />
@@ -244,10 +551,23 @@ function App() {
          </div>
 
          <div className="absolute inset-0 z-0">
-            {data.trackpoints && <RouteMap segments={data.segments} trackpoints={data.trackpoints} config={mapConfig} splits={data.performance?.km_splits} activeHighlight={activeHighlight} hoveredTrackpoint={hoveredTrackpoint} setActiveHighlight={setActiveHighlight} theme={theme} isMobileFrame={true} mobileDrawerOpen={mobileDrawerOpen} mobileTab={mobileTab} />}
+            {data.trackpoints && (
+              <RouteMap 
+                segments={data.segments} 
+                trackpoints={data.trackpoints} 
+                config={mapConfig} 
+                splits={data.performance?.km_splits} 
+                activeHighlight={activeHighlight} 
+                hoveredTrackpoint={hoveredTrackpoint} 
+                setActiveHighlight={setActiveHighlight} 
+                theme={theme}
+                isMobileFrame={true}
+                mobileDrawerOpen={mobileDrawerOpen}
+                mobileTab={mobileTab}
+              />
+            )}
          </div>
 
-         {/* FIXED #2, #3, #5: Reduced padding (p-3 instead of p-4), tightened chart dimensions */}
          {mobileDrawerOpen && (
             <div className={`absolute left-2 right-2 z-40 transition-all duration-300 shadow-2xl border flex flex-col p-3 rounded-2xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 ${mobileTab === 'charts' ? 'bottom-[72px] max-h-[35vh]' : 'bottom-[72px] max-h-[50vh]'}`}>
                <div className="w-8 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-2 flex-shrink-0" />
@@ -282,6 +602,7 @@ function App() {
             </button>
          </footer>
       </div>
+      {authModalDialogMarkup}
     </div>
   );
 }
