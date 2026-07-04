@@ -1122,26 +1122,22 @@ def compute_ascent_descent(df: pd.DataFrame):
         return np.nan, np.nan
         
     alt = pd.to_numeric(df["altitude_m"], errors="coerce")
-    
-    # FIXED: Dynamically scale the rolling window based on the dataset size.
-    # If the interval is smaller than 15 rows, reduce the window to prevent NaN collapse.
     data_length = len(alt.dropna())
+    
     if data_length < 3:
         return 0.0, 0.0
         
     window_size = min(15, data_length)
     
-    # TCX Elevation Noise Filter: Apply a dynamically scaled rolling median to strip spikes,
-    # followed by a rolling mean to smooth out the staircase steps.
-    smoothed_alt = alt.rolling(window=window_size, center=True, min_periods=1).median()
-    smoothed_alt = smoothed_alt.rolling(window=window_size, center=True, min_periods=1).mean()
+    # Smooth out GPS static without destroying the underlying topography
+    smoothed_alt = alt.rolling(window=window_size, center=True, min_periods=1).mean()
     
-    # Calculate deltas on the smoothed terrain line
+    # Calculate step-by-step deltas
     delta = smoothed_alt.diff().fillna(0.0)
     
-    # Ignore any micro-variations under 0.2 meters to prevent GPS bounce accumulation
-    ascent = float(delta[delta > 0.2].sum())
-    descent = float((-delta[delta < -0.2]).sum())
+    # Sum all positive and negative changes (threshold removed since smoothing handles noise)
+    ascent = float(delta[delta > 0].sum())
+    descent = float((-delta[delta < 0]).sum())
     
     return ascent, descent
 
