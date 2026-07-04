@@ -68,23 +68,23 @@ export default function RunSummary({ summary, metrics, theme }) {
 
       {/* MOTION SUMMARY WITH RE-SHADED BG PILLS */}
       <div className={`grid grid-cols-3 gap-2 text-center mt-6 pt-4 border-t ${isDark ? 'border-slate-800' : 'border-slate-300'}`}>
-        {['running', 'walking', 'stopped'].map(type => {
-          const stats = summary?.motion_totals?.[type] || { distance_m: 0, duration_s: 0 };
-          const distKm = ((stats.distance_m || 0) / 1000).toFixed(2);
-          
-          const secs = stats.duration_s || 0;
-          const m = Math.floor(secs / 60);
-          const s = Math.floor(secs % 60);
-          const timeStr = `${m}m ${s.toString().padStart(2, '0')}`;
-
+        // Inside RunSummary.jsx, in the Motion Totals block:
+        {metrics.motion_totals && Object.entries(metrics.motion_totals).map(([mode, stats]) => {
+          const emoji = mode === 'running' ? '👟' : mode === 'walking' ? '🚶' : '🛑';
+          const label = mode.charAt(0).toUpperCase() + mode.slice(1);
+          const dist = (stats.distance_m / 1000).toFixed(2);
+          const timeStr = `${Math.floor(stats.duration_s / 60)}m ${Math.floor(stats.duration_s % 60)}s`;
+        
           return (
-            <div key={type} className={`rounded p-2 transition-colors ${isDark ? 'bg-slate-950/40 text-slate-300' : 'bg-slate-100 text-slate-800'}`}>
-              <div className={`text-[10px] font-bold uppercase ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>{type}</div>
-              <div className={`text-sm font-black ${isDark ? 'text-white' : 'text-slate-800'}`}>{distKm} km</div>
-              <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{timeStr}</div>
+            <div key={mode} className={`flex justify-between items-center p-2 rounded-lg border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <span className="text-[11px] font-black flex items-center">{emoji} <span className="ml-1.5">{label}</span></span>
+              <span className="text-[10px] font-bold text-slate-500">
+                 <span className="text-blue-500 mr-1">{dist} km</span> • {timeStr}
+              </span>
             </div>
           );
         })}
+
       </div>
     </div>
   );

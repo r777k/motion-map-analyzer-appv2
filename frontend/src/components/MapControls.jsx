@@ -387,54 +387,43 @@ export default function MapControls({ config, setConfig, segments, trackpoints, 
         )}
 
         {/* CHRONOLOGICAL INTERVAL SEPRATED ROW MAPS */}
-        {segments && segments.length > 0 && (
-          <div className={`mt-6 pt-4 border-t ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
-            <label className={`block text-xs font-bold uppercase tracking-wider mb-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              Activity Intervals ({segments.length})
-            </label>
-            <div className="max-h-40 overflow-y-auto space-y-2 pr-1 scrollbar-none">
-              {segments.map((seg, idx) => {
-                const stateLabel = seg.label.charAt(0).toUpperCase() + seg.label.slice(1).toLowerCase();
-                const isSegSelected = activeHighlight?.type === 'time' && activeHighlight.id === `seg-${idx}`;
-
-                const distKm = ((seg.distance_m || 0) / 1000).toFixed(2);
-                const durationStr = `${Math.floor(seg.duration_s / 60)}m ${seg.duration_s % 60}s`;
-                const pMin = Math.floor(seg.avg_pace_min_per_km);
-                const pSec = Math.round((seg.avg_pace_min_per_km - pMin) * 60);
-                const paceStr = pSec === 60 ? `${pMin + 1}:00` : `${pMin}:${pSec.toString().padStart(2, '0')}`;
-
-                const handleSegClick = () => {
-                  if (isSegSelected) setActiveHighlight(null);
-                  else setActiveHighlight({ type: 'time', id: `seg-${idx}`, start: seg.start_time, end: seg.end_time });
-                };
-
-                return (
-                  <div key={idx} onClick={handleSegClick}
-                    className={`p-2.5 rounded-lg border text-xs cursor-pointer transition-all flex flex-col space-y-1.5 ${
-                      isSegSelected 
-                        ? (isDark ? 'bg-blue-950/40 border-blue-500 text-blue-300 font-bold shadow-md ring-1 ring-blue-500/20' : 'bg-blue-50 border-blue-400 font-bold text-blue-900 shadow-sm ring-1 ring-blue-400/30') 
-                        : (isDark ? 'bg-slate-900/60 hover:bg-slate-800 border-slate-800 text-slate-300' : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700')
-                    }`}
-                  >
-                    <div className="flex justify-between items-center">
-                      <span className="flex items-center space-x-1.5 font-bold uppercase tracking-wide text-[10px]">
-                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: seg.color || '#3b82f6' }} />
-                        <span>{stateLabel}</span>
-                      </span>
-                      <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{seg.start_time.split(' ')[1]} - {seg.end_time.split(' ')[1]}</span>
-                    </div>
-                    <div className={`grid grid-cols-4 gap-1 text-center font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                      <div><div className="text-[9px] text-slate-500 font-normal uppercase">Dist</div><div>{distKm} km</div></div>
-                      <div><div className="text-[9px] text-slate-500 font-normal uppercase">Time</div><div>{durationStr}</div></div>
-                      <div><div className="text-[9px] text-slate-500 font-normal uppercase">Pace</div><div>{paceStr} /km</div></div>
-                      <div><div className="text-[9px] text-slate-500 font-normal uppercase">Avg HR</div><div>{seg.avg_hr_bpm ? Math.round(seg.avg_hr_bpm) : '-'}</div></div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+      {segments && segments.length > 0 && (
+        <div className="mt-4">
+          <h4 className="text-[10px] font-black uppercase tracking-wider mb-2 flex justify-between items-center opacity-70">
+            <span>Activity Intervals</span>
+            <span className="bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[9px]">{segments.length} segments</span>
+          </h4>
+          
+          <div className={`max-h-40 overflow-y-auto rounded-lg border ${isDark ? 'border-slate-800 bg-slate-900/40' : 'border-slate-200 bg-slate-50'}`}>
+            <table className="w-full text-left text-[10px]">
+              <thead className={`sticky top-0 z-10 shadow-sm ${isDark ? 'bg-slate-900' : 'bg-slate-100'}`}>
+                <tr>
+                  <th className="p-1.5 font-bold uppercase text-slate-500">Mode</th>
+                  <th className="p-1.5 font-bold uppercase text-slate-500">Dist</th>
+                  <th className="p-1.5 font-bold uppercase text-slate-500">Pace</th>
+                  <th className="p-1.5 font-bold uppercase text-slate-500">Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {segments.map((seg, i) => (
+                  <tr key={i} className={`border-b last:border-b-0 ${isDark ? 'border-slate-800 hover:bg-slate-800' : 'border-slate-200 hover:bg-blue-50'}`}>
+                    <td className="p-1.5">
+                      {seg.label === 'running' ? '👟' : seg.label === 'walking' ? '🚶' : '🛑'}
+                    </td>
+                    <td className="p-1.5 font-medium">{(seg.distance_m / 1000).toFixed(2)}km</td>
+                    <td className="p-1.5 font-medium text-blue-500">
+                      {seg.avg_pace_min_per_km ? `${Math.floor(seg.avg_pace_min_per_km)}:${Math.round((seg.avg_pace_min_per_km % 1) * 60).toString().padStart(2, '0')}` : '-:--'}
+                    </td>
+                    <td className="p-1.5 font-medium text-slate-500">
+                      {seg.start_time ? seg.start_time.split(' ')[1] : ''}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        )}
+        </div>
+      )}
 
         {/* PRIVACY PROTECTION FOOTER */}
         <div className={`mt-4 pt-3 border-t text-[10px] flex items-start space-x-1.5 leading-normal p-2 rounded border ${isDark ? 'bg-slate-950/40 border-slate-800 text-slate-500' : 'bg-slate-50/50 border-slate-100 text-slate-400'}`}>
