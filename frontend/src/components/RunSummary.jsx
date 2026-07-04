@@ -68,7 +68,8 @@ export default function RunSummary({ summary, metrics, theme }) {
 
       {/* MOTION SUMMARY WITH RE-SHADED BG PILLS */}
       <div className={`grid grid-cols-3 gap-2 text-center mt-6 pt-4 border-t ${isDark ? 'border-slate-800' : 'border-slate-300'}`}>
-        {metrics.motion_totals && Object.entries(metrics.motion_totals).map(([mode, stats]) => {
+        {['running', 'walking', 'stopped'].map(type => {
+          metrics.motion_totals && Object.entries(metrics.motion_totals).map(([mode, stats]) => {
           const emoji = mode === 'running' ? '👟' : mode === 'walking' ? '🚶' : '🛑';
           const label = mode.charAt(0).toUpperCase() + mode.slice(1);
           const dist = (stats.distance_m / 1000).toFixed(2);
@@ -82,7 +83,7 @@ export default function RunSummary({ summary, metrics, theme }) {
               </span>
             </div>
           );
-        })}
+        })})}
 
       </div>
     </div>
