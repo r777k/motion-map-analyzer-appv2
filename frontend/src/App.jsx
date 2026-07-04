@@ -459,7 +459,7 @@ function App() {
                           <input type="text" placeholder="Filter by city location..." value={historySearchQuery} onChange={(e) => setHistorySearchQuery(e.target.value)} className={`flex-1 px-3 py-2 rounded-xl text-xs font-bold border outline-none ${theme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`} />
                           <select value={historySortBy} onChange={(e) => setHistorySortBy(e.target.value)} className="px-2 py-2 rounded-xl text-xs font-bold border dark:bg-slate-950 dark:border-slate-800"><option value="date_desc">Newest</option><option value="distance_desc">Distance</option></select>
                         </div>
-                        <div className="flex-1 h-[250px] overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
+                        <div className="flex-1 max-h-[250px] overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
                           {historyLoading ? (
                             <div className="text-center py-6 text-xs text-slate-400 font-bold">Streaming Neon Ledger Rows...</div>
                           ) : filteredHistory.length === 0 ? (
