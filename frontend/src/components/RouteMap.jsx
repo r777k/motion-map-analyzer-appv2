@@ -255,7 +255,7 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
         <ZoomTracker onZoomChange={setCurrentZoom} />
         
         {/* Render Zoom Controls bottom right, Recenter button dynamically shifts */}
-        <ZoomControl position={isMobileFrame ? "bottomright" : "topleft"} />
+        <ZoomControl position={isMobileFrame ? "bottomright" : "bottomleft"} />
         <RecenterButton coords={allCoords} isDark={isDark} isMobileFrame={isMobileFrame} mobileDrawerOpen={mobileDrawerOpen} mobileTab={mobileTab} />
         
         {baseStandardPolylines}
