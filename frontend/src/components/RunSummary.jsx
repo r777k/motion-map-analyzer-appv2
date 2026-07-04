@@ -42,13 +42,15 @@ export default function RunSummary({ summary, metrics, theme }) {
     <div className={`p-5 rounded-xl border shadow-sm transition-colors duration-200 ${
       isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
     }`}>
+      
+      {/* RETAINED: Your Custom Header Format */}
       <h2 className={`text-base font-bold tracking-wide uppercase opacity-90 border-b pb-2 mb-4 ${
         isDark ? 'border-slate-800 text-slate-100' : 'text-slate-800 border-slate-200'
       }`}>
         Run Summary &mdash; {date} &mdash; {location}
       </h2>
 
-      {/* Retained the full structured 12-item metrics panel layout grid */}
+      {/* RETAINED: Your Custom 12-Item Metrics Grid */}
       <div className="grid grid-cols-4 gap-y-5 gap-x-2 mb-6">
         <StatBox label="Start" value={start} isDark={isDark} />
         <StatBox label="End" value={end} isDark={isDark} />
@@ -66,26 +68,36 @@ export default function RunSummary({ summary, metrics, theme }) {
         <StatBox label="Descent" value={`${Math.round(summary["descent_m"] || 0)} m`} isDark={isDark} />
       </div>
 
-      {/* MOTION SUMMARY WITH RE-SHADED BG PILLS */}
-      <div className={`grid grid-cols-3 gap-2 text-center mt-6 pt-4 border-t ${isDark ? 'border-slate-800' : 'border-slate-300'}`}>
+      {/* FIXED: Motion Totals rendered with dist/time inline */}
+      <div className={`flex flex-col space-y-2 mt-6 pt-4 border-t ${isDark ? 'border-slate-800' : 'border-slate-300'}`}>
         {['running', 'walking', 'stopped'].map(type => {
-          metrics.motion_totals && Object.entries(metrics.motion_totals).map(([mode, stats]) => {
-          const emoji = mode === 'running' ? '👟' : mode === 'walking' ? '🚶' : '🛑';
-          const label = mode.charAt(0).toUpperCase() + mode.slice(1);
-          const dist = (stats.distance_m / 1000).toFixed(2);
-          const timeStr = `${Math.floor(stats.duration_s / 60)}m ${Math.floor(stats.duration_s % 60)}s`;
-        
+          const stats = summary?.motion_totals?.[type] || { distance_m: 0, duration_s: 0 };
+          const distKm = ((stats.distance_m || 0) / 1000).toFixed(2);
+          
+          const secs = stats.duration_s || 0;
+          const m = Math.floor(secs / 60);
+          const s = Math.floor(secs % 60);
+          const timeStr = `${m}m ${s.toString().padStart(2, '0')}s`;
+
+          const emoji = type === 'running' ? '👟' : type === 'walking' ? '🚶' : '🛑';
+          const label = type.charAt(0).toUpperCase() + type.slice(1);
+
           return (
-            <div key={mode} className={`flex justify-between items-center p-2 rounded-lg border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-              <span className="text-[11px] font-black flex items-center">{emoji} <span className="ml-1.5">{label}</span></span>
-              <span className="text-[10px] font-bold text-slate-500">
-                 <span className="text-blue-500 mr-1">{dist} km</span> • {timeStr}
+            <div key={type} className={`flex justify-between items-center px-3 py-2 rounded-lg border shadow-sm transition-colors ${
+              isDark ? 'bg-slate-900 border-slate-800 hover:bg-slate-800' : 'bg-white border-slate-200 hover:bg-slate-50'
+            }`}>
+              <span className={`text-[11px] font-black flex items-center tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                <span className="mr-1.5 text-sm">{emoji}</span>
+                {label}
+              </span>
+              <span className={`text-[10px] font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                 <span className="text-blue-500 mr-1.5">{distKm} km</span> • <span className="ml-1.5">{timeStr}</span>
               </span>
             </div>
           );
-        })})}
-
+        })}
       </div>
+      
     </div>
   );
 }
