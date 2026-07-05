@@ -36,22 +36,22 @@ const THICKNESS_MODES = {
     weights: { standard: 2.0, standardActive: 4.0, standardDimmed: 0.8, overlay: 2.0, overlayActive: 4.0, overlayDimmed: 0.8 },
     arrowSize: 11,
     arrowStroke: 1.5,
-    fontSize: '9px',
-    markerRadius: 3
+    fontSize: '7px',
+    markerRadius: 2
   },
   medium: {
     weights: { standard: 3.5, standardActive: 5.5, standardDimmed: 1.5, overlay: 4.5, overlayActive: 6.5, overlayDimmed: 1.5 },
     arrowSize: 15,
     arrowStroke: 2.5,
-    fontSize: '11px',
-    markerRadius: 4
+    fontSize: '9px',
+    markerRadius: 3
   },
   thick: {
     weights: { standard: 5.5, standardActive: 7.5, standardDimmed: 2.2, overlay: 6.5, overlayActive: 8.5, overlayDimmed: 2.0 },
     arrowSize: 19,
     arrowStroke: 3.5,
-    fontSize: '13px',
-    markerRadius: 5
+    fontSize: '11px',
+    markerRadius: 4
   }
 };
 
