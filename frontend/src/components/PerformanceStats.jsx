@@ -65,7 +65,7 @@ export default function PerformanceStats({ performance, activeHighlight, setActi
     <div className={`mt-2 ${isDark ? 'text-slate-100' : 'text-slate-800'}`}>
       <h2 className="text-sm font-black uppercase tracking-wider mb-4 flex items-center space-x-2">
         <span className="text-blue-500">📊</span>
-        <span>Biometric Splits & Zones</span>
+        <span>Splits & Zones</span>
       </h2>
       <div className="space-y-6">
         {Object.entries(performance).map(([title, tableData]) => {
@@ -191,14 +191,9 @@ export default function PerformanceStats({ performance, activeHighlight, setActi
                           } else if (headerLower === "ef" && val !== null) {
                               // FIXED: explicitly target EF format styling (limit to 2 decimals)
                               val = parseFloat(val).toFixed(2);
-                              console.log('PerformanceStats ef headerLower:', headerLower);
-                              console.log('PerformanceStats ef val:', val);
                           } else if (typeof val === 'number') {
                               val = Number.isInteger(val) ? val : parseFloat(val.toFixed(2));
-                          } else {
-                              console.log('PerformanceStats else headerLower:', headerLower);
-                              console.log('PerformanceStats else val:', val);
-                          }
+                          } 
 
                           return <td key={header} className="px-3 py-2 font-medium">{val !== null ? val : '-'}</td>;
                         })}
