@@ -31,28 +31,31 @@ const STATE_COLORS = {
   'Stopped': '#ef4444'
 };
 
-// FIXED: Reduced fontSize and markerRadius values to make KM/Time markers much smaller
+// FIXED: Added markerStroke so the white border shrinks along with the marker radius
 const THICKNESS_MODES = {
   thin: {
     weights: { standard: 2.0, standardActive: 4.0, standardDimmed: 0.8, overlay: 2.0, overlayActive: 4.0, overlayDimmed: 0.8 },
     arrowSize: 11,
     arrowStroke: 1.5,
     fontSize: '8px',
-    markerRadius: 2
+    markerRadius: 2,
+    markerStroke: 1
   },
   medium: {
     weights: { standard: 3.5, standardActive: 5.5, standardDimmed: 1.5, overlay: 4.5, overlayActive: 6.5, overlayDimmed: 1.5 },
     arrowSize: 15,
     arrowStroke: 2.5,
     fontSize: '9px',
-    markerRadius: 3
+    markerRadius: 3,
+    markerStroke: 1.5
   },
   thick: {
     weights: { standard: 5.5, standardActive: 7.5, standardDimmed: 2.2, overlay: 6.5, overlayActive: 8.5, overlayDimmed: 2.0 },
     arrowSize: 19,
     arrowStroke: 3.5,
     fontSize: '11px',
-    markerRadius: 4
+    markerRadius: 4,
+    markerStroke: 2
   }
 };
 
@@ -89,7 +92,6 @@ const formatPace = (decimalMins) => {
   return `${Math.floor(decimalMins)}:${Math.round((decimalMins - Math.floor(decimalMins)) * 60).toString().padStart(2, '0')} /km`;
 };
 
-// FIXED: Mathematical padding overhaul to force maximum zoom within the *visible* space.
 function FitBounds({ coords, isMobileFrame, mobileDrawerOpen, mobileTab }) {
   const map = useMap();
   useEffect(() => {
@@ -100,9 +102,7 @@ function FitBounds({ coords, isMobileFrame, mobileDrawerOpen, mobileTab }) {
 
       if (isMobileFrame && mobileDrawerOpen) {
         const vh = window.innerHeight;
-        // Drawer heights: charts is max-h-[35vh], others are max-h-[50vh].
         const drawerVh = mobileTab === 'charts' ? 0.35 : 0.50;
-        // Add 80px to safely clear the footer bar + base padding
         pBottom = (vh * drawerVh) + 80;
       }
 
@@ -122,8 +122,6 @@ function ZoomTracker({ onZoomChange }) {
   return null;
 }
 
-// FIXED: Re-wired RecenterButton to use the exact dynamic math as FitBounds, ensuring it snaps to maximum zoom.
-// Also repositioned for Mobile to sit directly beneath the new top-right zoom controls.
 function RecenterButton({ coords, isDark, isMobileFrame, mobileDrawerOpen, mobileTab }) {
   const map = useMap();
   
@@ -398,7 +396,6 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
 
   return (
     <div className="absolute inset-0 rounded-xl overflow-hidden z-0 w-full h-full">
-      {/* FIXED: Added CSS injection to shift standard Leaflet controls dynamically out from under mobile UI headers/drawers */}
       {isMobileFrame && (
         <style>{`
           .leaflet-top.leaflet-right {
@@ -414,7 +411,6 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
 
         <RecenterButton coords={allCoords} isDark={isDark} isMobileFrame={isMobileFrame} mobileDrawerOpen={mobileDrawerOpen} mobileTab={mobileTab} />
 
-        {/* FIXED: Placed on topright for Mobile to prevent drawer overlap. CSS margin clears the header pill. */}
         <ZoomControl position={isMobileFrame ? "topright" : "bottomright"} />
         
         {baseStandardPolylines}
@@ -423,9 +419,11 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
         {mapMarkers.map(m => {
           if (m.isDirectional) return <Marker key={m.id} position={m.pos} icon={m.icon} />;
           return (
-            <CircleMarker key={m.id} center={m.pos} radius={modeConfig.markerRadius} pathOptions={{ color: 'white', fillColor: m.color, fillOpacity: 1, weight: 2 }}>
-              {/* FIXED: Condensed Tooltip padding to px-1.5 py-0 so the white box scales tightly to the new smaller font sizes */}
-              <Tooltip direction="top" offset={[0, -10]} opacity={0.9} permanent className={`font-bold rounded shadow-sm border-0 px-1.5 py-0 ${isDark ? 'bg-slate-950 text-slate-200 border border-slate-800' : 'bg-white text-slate-800'}`} style={{ fontSize: modeConfig.fontSize }}>{m.text}</Tooltip>
+            <CircleMarker key={m.id} center={m.pos} radius={modeConfig.markerRadius} pathOptions={{ color: 'white', fillColor: m.color, fillOpacity: 1, weight: modeConfig.markerStroke }}>
+              {/* FIXED: Passed inline style to a <span> inside the Tooltip, and added !px-1.5 to override Leaflet default padding */}
+              <Tooltip direction="top" offset={[0, -10]} opacity={0.9} permanent className={`font-bold rounded shadow-sm border-0 !px-1.5 !py-0.5 flex items-center justify-center ${isDark ? 'bg-slate-950 text-slate-200 border border-slate-800' : 'bg-white text-slate-800'}`}>
+                <span style={{ fontSize: modeConfig.fontSize, lineHeight: '1.2' }}>{m.text}</span>
+              </Tooltip>
             </CircleMarker>
           );
         })}
@@ -434,8 +432,8 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
           <CircleMarker 
             key={`hover-${hoveredTrackpoint.latitude}-${hoveredTrackpoint.longitude}`}
             center={[hoveredTrackpoint.latitude, hoveredTrackpoint.longitude]} 
-            radius={modeConfig.markerRadius + 3} 
-            pathOptions={{ color: 'white', fillColor: '#edc001', fillOpacity: 1, weight: 2.5 }} 
+            radius={modeConfig.markerRadius + 2} 
+            pathOptions={{ color: 'white', fillColor: '#edc001', fillOpacity: 1, weight: modeConfig.markerStroke + 0.5 }} 
           />
         )}
       </MapContainer>
