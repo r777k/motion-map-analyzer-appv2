@@ -437,7 +437,7 @@ function App() {
                         </div>
                       ) : (
                         <div className="text-center">
-                           <button type="button" disabled={loading} onClick={() => { window.location.href = `https://www.strava.com/oauth/authorize?client_id=${import.meta.env.VITE_STRAVA_CLIENT_ID || '260297'}&response_type=code&redirect_uri=${encodeURIComponent(FRONTEND_URL)}&approval_prompt=auto&scope=activity:read_all`; }} className="px-4 py-2.5 bg-[#FC6100] text-white text-xs font-black rounded-xl shadow-md border-0 w-full">Authenticate via Strava OAuth</button>
+                           <button type="button" disabled={loading} onClick={() => { const redirectURI = encodeURIComponent("https://motion-map-analyzer-appv2.vercel.app"); window.location.href = `https://www.strava.com/oauth/authorize?client_id=${import.meta.env.VITE_STRAVA_CLIENT_ID || '260297'}&response_type=code&redirect_uri=${redirectURI}&approval_prompt=auto&scope=activity:read_all`; }} className="px-4 py-2.5 bg-[#FC6100] text-white text-xs font-black rounded-xl shadow-md border-0 w-full">Authenticate via Strava OAuth</button>
                         </div>
                       )
                     )}
