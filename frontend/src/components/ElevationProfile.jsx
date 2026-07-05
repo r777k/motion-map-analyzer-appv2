@@ -250,11 +250,8 @@ export default function ElevationProfile({ trackpoints, segments, config, active
   };
 
   return (
-    <div className={`p-5 rounded-xl border shadow-sm mt-2 flex flex-col select-none min-w-0 transition-colors duration-200 ${isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
-      <div className={`flex justify-between items-center border-b pb-2 mb-4 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-        <div>
-          <h3 className="text-sm font-bold uppercase tracking-wider opacity-90">Timeline Profile</h3>
-        </div>
+    <div className={`p-3 rounded-xl border shadow-sm mt-2 flex flex-col select-none min-w-0 transition-colors duration-200 ${isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+      <div className={`flex justify-between items-center border-b pb-2 mb-2 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
         <div className={`text-[11px] font-semibold px-2 py-1 rounded border ${isDark ? 'bg-slate-950 border-slate-800 text-slate-400' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
           ⛰️ Base: {elevBounds.min.toFixed(0)}m | Peak: {elevBounds.max.toFixed(0)}m
         </div>
