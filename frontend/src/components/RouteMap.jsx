@@ -152,7 +152,7 @@ function RecenterButton({ coords, isDark, isMobileFrame, mobileDrawerOpen, mobil
       type="button"
       onClick={handleRecenter}
       className={`absolute z-[1000] p-2.5 rounded-xl shadow-lg border transition-all active:scale-95 flex items-center justify-center ${
-        isMobileFrame ? 'top-[140px] right-3' : 'bottom-6 right-6'
+        isMobileFrame ? 'top-[140px] right-3' : 'top-6 top-6'
       } ${isDark ? 'bg-slate-900 text-slate-200 border-slate-800' : 'bg-white text-slate-700 border-slate-200'}`}
       title="Recenter Visible Viewport"
     >
@@ -415,7 +415,7 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
         <RecenterButton coords={allCoords} isDark={isDark} isMobileFrame={isMobileFrame} mobileDrawerOpen={mobileDrawerOpen} mobileTab={mobileTab} />
 
         {/* FIXED: Placed on topright for Mobile to prevent drawer overlap. CSS margin clears the header pill. */}
-        <ZoomControl position={isMobileFrame ? "topright" : "bottomright"} />
+        <ZoomControl position={isMobileFrame ? "bottomright" : "bottomright"} />
         
         {baseStandardPolylines}
         {overlayPolylines}
