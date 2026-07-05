@@ -31,12 +31,13 @@ const STATE_COLORS = {
   'Stopped': '#ef4444'
 };
 
+// FIXED: Reduced fontSize and markerRadius values to make KM/Time markers much smaller
 const THICKNESS_MODES = {
   thin: {
     weights: { standard: 2.0, standardActive: 4.0, standardDimmed: 0.8, overlay: 2.0, overlayActive: 4.0, overlayDimmed: 0.8 },
     arrowSize: 11,
     arrowStroke: 1.5,
-    fontSize: '7px',
+    fontSize: '8px',
     markerRadius: 2
   },
   medium: {
@@ -88,23 +89,26 @@ const formatPace = (decimalMins) => {
   return `${Math.floor(decimalMins)}:${Math.round((decimalMins - Math.floor(decimalMins)) * 60).toString().padStart(2, '0')} /km`;
 };
 
+// FIXED: Mathematical padding overhaul to force maximum zoom within the *visible* space.
 function FitBounds({ coords, isMobileFrame, mobileDrawerOpen, mobileTab }) {
   const map = useMap();
   useEffect(() => {
     if (coords && coords.length > 0) {
-      let bottomOffsetPadding = 50;
-      let topOffsetPadding = 50;
+      let pTop = isMobileFrame ? 60 : 20; 
+      let pBottom = isMobileFrame ? 80 : 20; 
+      let pX = isMobileFrame ? 15 : 20; 
 
       if (isMobileFrame && mobileDrawerOpen) {
-        // Nudge padding: 110px from the top (to clear header/controls)
-        topOffsetPadding = 110; 
-        // 72% offset from the bottom keeps it centered entirely in the visible upper pane
-        bottomOffsetPadding = mobileTab === 'charts' ? window.innerHeight * 0.44 : window.innerHeight * 0.72;
+        const vh = window.innerHeight;
+        // Drawer heights: charts is max-h-[35vh], others are max-h-[50vh].
+        const drawerVh = mobileTab === 'charts' ? 0.35 : 0.50;
+        // Add 80px to safely clear the footer bar + base padding
+        pBottom = (vh * drawerVh) + 80;
       }
 
       map.fitBounds(coords, { 
-        paddingTopLeft: [40, topOffsetPadding],
-        paddingBottomRight: [40, bottomOffsetPadding],
+        paddingTopLeft: [pX, pTop],
+        paddingBottomRight: [pX, pBottom],
         animate: true,
         duration: 0.5
       });
@@ -118,14 +122,37 @@ function ZoomTracker({ onZoomChange }) {
   return null;
 }
 
-function RecenterButton({ coords, isDark, isMobileFrame }) {
+// FIXED: Re-wired RecenterButton to use the exact dynamic math as FitBounds, ensuring it snaps to maximum zoom.
+// Also repositioned for Mobile to sit directly beneath the new top-right zoom controls.
+function RecenterButton({ coords, isDark, isMobileFrame, mobileDrawerOpen, mobileTab }) {
   const map = useMap();
+  
+  const handleRecenter = () => {
+    if (!coords || coords.length === 0) return;
+    let pTop = isMobileFrame ? 60 : 20; 
+    let pBottom = isMobileFrame ? 80 : 20; 
+    let pX = isMobileFrame ? 15 : 20; 
+
+    if (isMobileFrame && mobileDrawerOpen) {
+      const vh = window.innerHeight;
+      const drawerVh = mobileTab === 'charts' ? 0.35 : 0.50;
+      pBottom = (vh * drawerVh) + 80;
+    }
+
+    map.fitBounds(coords, { 
+      paddingTopLeft: [pX, pTop],
+      paddingBottomRight: [pX, pBottom],
+      animate: true,
+      duration: 0.5
+    });
+  };
+
   return (
     <button
       type="button"
-      onClick={() => { if (coords && coords.length > 0) map.invalidateSize(); }}
+      onClick={handleRecenter}
       className={`absolute z-[1000] p-2.5 rounded-xl shadow-lg border transition-all active:scale-95 flex items-center justify-center ${
-        isMobileFrame ? 'bottom-4 right-3' : 'top-4 right-4'
+        isMobileFrame ? 'top-[140px] right-3' : 'bottom-6 right-6'
       } ${isDark ? 'bg-slate-900 text-slate-200 border-slate-800' : 'bg-white text-slate-700 border-slate-200'}`}
       title="Recenter Visible Viewport"
     >
@@ -317,7 +344,6 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
 
     if (config.markers.Kilometre && splits && splits.length > 0) {
       splits.forEach(split => {
-         // FIXED: Replaced brittle timestamp comparison with robust distance lookup based on your diagnostic
          const tp = trackpoints.find(t => (t.distance_m || t._distance_m) >= split.index * 1000);
          if (tp) markers.push({ id: `km-${split.index}`, pos: [tp.latitude, tp.longitude], text: `${split.index} km`, color: '#3b82f6' });
       });
@@ -372,15 +398,24 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
 
   return (
     <div className="absolute inset-0 rounded-xl overflow-hidden z-0 w-full h-full">
+      {/* FIXED: Added CSS injection to shift standard Leaflet controls dynamically out from under mobile UI headers/drawers */}
+      {isMobileFrame && (
+        <style>{`
+          .leaflet-top.leaflet-right {
+            margin-top: 65px; 
+          }
+        `}</style>
+      )}
+
       <MapContainer style={{ height: '100%', width: '100%' }} zoom={13} scrollWheelZoom={true} zoomControl={false}>
         <TileLayer key={config.baseMap} url={BASE_MAPS[config.baseMap] || BASE_MAPS['Standard']} attribution='&copy; OpenStreetMap contributors' />
         <FitBounds coords={allCoords} isMobileFrame={isMobileFrame} mobileDrawerOpen={mobileDrawerOpen} mobileTab={mobileTab} />
         <ZoomTracker onZoomChange={setCurrentZoom} />
 
-        <RecenterButton coords={allCoords} isDark={isDark} isMobileFrame={isMobileFrame} />
+        <RecenterButton coords={allCoords} isDark={isDark} isMobileFrame={isMobileFrame} mobileDrawerOpen={mobileDrawerOpen} mobileTab={mobileTab} />
 
-        {/* FIXED: Shift scale handles to bottomright to avoid red close (X) overlay overlap */}
-        <ZoomControl position="bottomright" />
+        {/* FIXED: Placed on topright for Mobile to prevent drawer overlap. CSS margin clears the header pill. */}
+        <ZoomControl position={isMobileFrame ? "topright" : "bottomright"} />
         
         {baseStandardPolylines}
         {overlayPolylines}
@@ -389,12 +424,12 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
           if (m.isDirectional) return <Marker key={m.id} position={m.pos} icon={m.icon} />;
           return (
             <CircleMarker key={m.id} center={m.pos} radius={modeConfig.markerRadius} pathOptions={{ color: 'white', fillColor: m.color, fillOpacity: 1, weight: 2 }}>
-              <Tooltip direction="top" offset={[0, -10]} opacity={0.9} permanent className={`font-bold rounded shadow-sm border-0 px-2 py-0.5 ${isDark ? 'bg-slate-950 text-slate-200 border border-slate-800' : 'bg-white text-slate-800'}`} style={{ fontSize: modeConfig.fontSize }}>{m.text}</Tooltip>
+              {/* FIXED: Condensed Tooltip padding to px-1.5 py-0 so the white box scales tightly to the new smaller font sizes */}
+              <Tooltip direction="top" offset={[0, -10]} opacity={0.9} permanent className={`font-bold rounded shadow-sm border-0 px-1.5 py-0 ${isDark ? 'bg-slate-950 text-slate-200 border border-slate-800' : 'bg-white text-slate-800'}`} style={{ fontSize: modeConfig.fontSize }}>{m.text}</Tooltip>
             </CircleMarker>
           );
         })}
 
-        {/* FIXED: Replaced standard key with dynamic coordinate-bound key to force React component mounting/unmounting */}
         {hoveredTrackpoint && (
           <CircleMarker 
             key={`hover-${hoveredTrackpoint.latitude}-${hoveredTrackpoint.longitude}`}
