@@ -316,7 +316,7 @@ export default function ElevationProfile({ trackpoints, segments, config, active
         </ResponsiveContainer>
       </div>
 
-      <div className={`h-1.5 w-full mt-3 flex rounded-full overflow-hidden border ${isDark ? 'border-slate-950 bg-slate-950' : 'border-slate-100 bg-slate-100'}`}>
+      <div className={`h-1.5 w-full mt-1 flex rounded-full overflow-hidden border ${isDark ? 'border-slate-950 bg-slate-950' : 'border-slate-100 bg-slate-100'}`}>
         {motionBlocks}
       </div>
       <div className={`flex justify-between items-center border-b pb-2 mb-2 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
