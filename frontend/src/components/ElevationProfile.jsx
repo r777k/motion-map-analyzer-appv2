@@ -250,12 +250,8 @@ export default function ElevationProfile({ trackpoints, segments, config, active
   };
 
   return (
-    <div className={`p-3 rounded-xl border shadow-sm mt-2 flex flex-col select-none min-w-0 transition-colors duration-200 ${isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
-      <div className={`flex justify-between items-center border-b pb-2 mb-2 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-        <div className={`text-[11px] font-semibold px-2 py-1 rounded border ${isDark ? 'bg-slate-950 border-slate-800 text-slate-400' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
-          ⛰️ Base: {elevBounds.min.toFixed(0)}m | Peak: {elevBounds.max.toFixed(0)}m
-        </div>
-      </div>
+    <div className={`p-5 rounded-xl border shadow-sm mt-2 flex flex-col select-none min-w-0 transition-colors duration-200 ${isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
+
 
       <div className="flex space-x-2 mb-4">
         {['Pace', 'HR', 'Cadence'].map(k => (
@@ -322,6 +318,11 @@ export default function ElevationProfile({ trackpoints, segments, config, active
 
       <div className={`h-1.5 w-full mt-3 flex rounded-full overflow-hidden border ${isDark ? 'border-slate-950 bg-slate-950' : 'border-slate-100 bg-slate-100'}`}>
         {motionBlocks}
+      </div>
+      <div className={`flex justify-between items-center border-b pb-2 mb-2 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+        <div className={`text-[11px] font-semibold px-2 py-1 rounded border ${isDark ? 'bg-slate-950 border-slate-800 text-slate-400' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+          ⛰️ Base: {elevBounds.min.toFixed(0)}m | Peak: {elevBounds.max.toFixed(0)}m
+        </div>
       </div>
     </div>
   );
