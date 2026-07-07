@@ -412,98 +412,94 @@ function App() {
     </div>
   );
 
-const renderCinematicTeaser = () => (
+  const renderCinematicTeaser = () => (
     <div className={`relative w-full h-[380px] md:h-[500px] flex items-center justify-center overflow-hidden rounded-2xl shadow-sm border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'} perspective-[1200px]`}>
       <style>{`
-        .iso-group {
-          transform: rotateX(55deg) rotateY(0deg) rotateZ(-45deg) scale(0.9);
+        .iso-container {
+          transform: rotateX(55deg) rotateY(0deg) rotateZ(-45deg) scale(0.95);
           transform-style: preserve-3d;
+          position: relative;
+          width: 340px;
+          height: 220px;
         }
-        .iso-card {
-          width: 320px;
-          height: 240px;
+        
+        .iso-layer {
           position: absolute;
-          top: 50%;
-          left: 50%;
-          margin-top: -120px;
-          margin-left: -160px;
+          top: 0; left: 0; right: 0; bottom: 0;
           border-radius: 12px;
-          background: ${theme === 'dark' ? '#0f172a' : '#ffffff'};
-          border: 1px solid ${theme === 'dark' ? '#1e293b' : '#e2e8f0'};
+          background-size: cover;
+          background-position: center top;
+          background-repeat: no-repeat;
+          border: 1px solid ${theme === 'dark' ? 'rgba(30, 41, 59, 0.8)' : 'rgba(226, 232, 240, 0.8)'};
           box-shadow: ${theme === 'dark' ? '-25px 25px 40px rgba(0,0,0,0.6)' : '-25px 25px 40px rgba(0,0,0,0.1)'};
-          overflow: hidden;
+          
+          /* The floating animation uses a CSS variable for the Z-depth */
+          animation: floatLayer 6s ease-in-out infinite;
         }
-        @keyframes sweepCrosshair {
-          0%, 10% { left: 5%; }
-          90%, 100% { left: 95%; }
+
+        /* Subtle vertical floating effect */
+        @keyframes floatLayer {
+          0%, 100% { transform: translateZ(var(--z-offset)) translateY(0px); }
+          50% { transform: translateZ(var(--z-offset)) translateY(-12px); }
         }
-        @keyframes dotTrace {
-          0%, 10% { offset-distance: 0%; }
-          90%, 100% { offset-distance: 100%; }
+
+        /* A glowing scanner line to keep the static images feeling dynamic */
+        .scanner-line {
+          position: absolute;
+          top: 0; bottom: 0;
+          width: 2px;
+          background: rgba(59, 130, 246, 0.8);
+          box-shadow: 0 0 15px rgba(59, 130, 246, 1);
+          animation: scan 4s ease-in-out infinite alternate;
+          z-index: 50;
         }
-        .trace-dot {
-          /* Exact exact match to the SVG Map Path below */
-          offset-path: path('M 50 180 C 30 100, 100 40, 160 50 C 240 60, 280 150, 220 200 C 150 250, 70 260, 50 180 Z');
-          animation: dotTrace 6s ease-in-out infinite alternate;
+
+        @keyframes scan {
+          0% { left: 5%; opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { left: 95%; opacity: 0; }
         }
       `}</style>
 
-      <div className="iso-group w-full h-full">
-        {/* BOTTOM CARD: High-Fidelity Performance Stats Replica */}
-        <div className="iso-card flex flex-col p-4" style={{ transform: 'translateZ(-100px)' }}>
-          <div className={`w-32 h-3 rounded mb-4 ${theme === 'dark' ? 'bg-slate-700' : 'bg-slate-200'}`} />
-          <div className="space-y-3">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className={`flex items-center justify-between p-2 rounded border ${theme === 'dark' ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
-                <div className={`w-8 h-2 rounded ${theme === 'dark' ? 'bg-slate-600' : 'bg-slate-300'}`} />
-                <div className={`w-12 h-2 rounded ${theme === 'dark' ? 'bg-slate-600' : 'bg-slate-300'}`} />
-                <div className="w-16 h-2 rounded bg-blue-500/80" />
-              </div>
-            ))}
-          </div>
+      <div className="iso-container">
+        
+        {/* BOTTOM CARD: Stats Table Image */}
+        <div 
+          className="iso-layer" 
+          style={{ 
+            '--z-offset': '-110px', 
+            backgroundImage: "url('/stats-layer.png')",
+            backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
+            animationDelay: '0s'
+          }} 
+        />
+
+        {/* MIDDLE CARD: Elevation Chart Image */}
+        <div 
+          className="iso-layer overflow-hidden" 
+          style={{ 
+            '--z-offset': '0px', 
+            backgroundImage: "url('/chart-layer.png')",
+            backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
+            animationDelay: '0.2s'
+          }} 
+        >
+          {/* Animated playback scanner sweeping over the chart screenshot */}
+          <div className="scanner-line" />
         </div>
 
-        {/* MIDDLE CARD: Realistic Elevation Profile Replica */}
-        <div className="iso-card flex flex-col relative" style={{ transform: 'translateZ(0px)' }}>
-          <div className={`px-4 pt-4 pb-2 border-b ${theme === 'dark' ? 'border-slate-800 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
-            <div className={`w-24 h-2.5 rounded ${theme === 'dark' ? 'bg-slate-700' : 'bg-slate-200'}`} />
-          </div>
-          <div className="flex-1 relative w-full h-full">
-            <div className={`absolute bottom-0 w-full h-[85%] bg-gradient-to-t ${theme === 'dark' ? 'from-blue-900/50' : 'from-blue-200/50'} to-transparent`} />
-            <svg className="absolute bottom-0 w-full h-full" viewBox="0 0 100 50" preserveAspectRatio="none">
-              <path d="M 0 50 L 0 45 L 15 42 L 25 25 L 35 30 L 45 15 L 55 20 L 70 5 L 85 18 L 100 10 L 100 50 Z" fill={theme === 'dark' ? '#1e3a8a' : '#bfdbfe'} opacity="0.4" />
-              <path d="M 0 45 L 15 42 L 25 25 L 35 30 L 45 15 L 55 20 L 70 5 L 85 18 L 100 10" fill="none" stroke="#3b82f6" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-            </svg>
-            {/* Synchronized Sweeping Crosshair */}
-            <div className="absolute top-0 bottom-0 w-[1px] bg-blue-500/80 shadow-[0_0_8px_#3b82f6] z-10" style={{ animation: 'sweepCrosshair 6s ease-in-out infinite alternate' }}>
-              <div className={`absolute top-2 -left-[35px] px-2 py-1 rounded text-[8px] font-bold ${theme === 'dark' ? 'bg-slate-950 text-white border border-slate-700' : 'bg-white text-slate-800 shadow-md'}`}>184 bpm</div>
-            </div>
-          </div>
-        </div>
-
-        {/* TOP CARD: Leaflet Route Map Replica */}
-        <div className="iso-card relative" style={{ transform: 'translateZ(100px)' }}>
-          {/* Map Grid Background */}
-          <div className={`absolute inset-0 opacity-40 ${theme === 'dark' ? 'bg-[#0f172a]' : 'bg-[#f8fafc]'}`} style={{ backgroundImage: `radial-gradient(${theme === 'dark' ? '#334155' : '#cbd5e1'} 1px, transparent 1px)`, backgroundSize: '20px 20px' }} />
-          
-          {/* Mock Map Controls */}
-          <div className={`absolute top-3 left-3 flex flex-col space-y-1`}>
-             <div className={`w-6 h-6 rounded shadow-sm border ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`} />
-             <div className={`w-6 h-6 rounded shadow-sm border ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`} />
-          </div>
-
-          <svg className="w-full h-full relative z-10" viewBox="0 0 320 240">
-            {/* Closed Loop Route Path */}
-            <path d="M 50 180 C 30 100, 100 40, 160 50 C 240 60, 280 150, 220 200 C 150 250, 70 260, 50 180 Z" fill="none" stroke="#3b82f6" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-            
-            {/* Mock Markers */}
-            <circle cx="160" cy="50" r="4" fill="#3b82f6" stroke="white" strokeWidth="2" />
-            <circle cx="220" cy="200" r="4" fill="#3b82f6" stroke="white" strokeWidth="2" />
-          </svg>
-
-          {/* Synchronized Moving Dot along Path */}
-          <div className="trace-dot absolute z-20 w-3 h-3 rounded-full bg-amber-400 shadow-[0_0_10px_#fbbf24] border-2 border-white dark:border-slate-900 -ml-[6px] -mt-[6px]" />
-        </div>
+        {/* TOP CARD: Route Map Image */}
+        <div 
+          className="iso-layer" 
+          style={{ 
+            '--z-offset': '110px', 
+            backgroundImage: "url('/map-layer.png')",
+            backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
+            animationDelay: '0.4s'
+          }} 
+        />
+        
       </div>
     </div>
   );
