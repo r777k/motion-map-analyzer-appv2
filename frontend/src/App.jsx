@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { 
   UploadCloud, Info, X, Sun, Moon, Download, Camera, LogIn, LogOut, 
@@ -24,6 +24,11 @@ function App() {
   const [sidebarWidth, setSidebarWidth] = useState(600);
   const [isDraggingSplitter, setIsDraggingSplitter] = useState(false);
   const [theme, setTheme] = useState('light');
+
+  // --- UPLOAD PROGRESS SIMULATION STATE ---
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isSimulatingProgress, setIsSimulatingProgress] = useState(false);
+  const progressIntervalRef = useRef(null);
 
   // --- OAUTH & SESSION STATE ---
   const [userToken, setUserToken] = useState(localStorage.getItem('motion_map_token') || null);
@@ -181,18 +186,81 @@ function App() {
     }
   };
 
+  // --- UPLOAD PROGRESS SIMULATION LOGIC ---
+  const simulateProgress = () => {
+    setIsSimulatingProgress(true);
+    setUploadProgress(0);
+    let currentProgress = 0;
+    progressIntervalRef.current = setInterval(() => {
+      if (currentProgress < 85) {
+        currentProgress += Math.random() * 12; // Rapid climb to 85% over ~1.5s
+      } else if (currentProgress < 95) {
+        currentProgress += Math.random() * 1.5; // Slow creep from 85% to 95%
+      }
+      if (currentProgress > 95) currentProgress = 95;
+      setUploadProgress(currentProgress);
+    }, 150);
+  };
+
+  const finishProgress = () => {
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    setUploadProgress(100);
+  };
+
+  const resetProgress = () => {
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    setIsSimulatingProgress(false);
+    setUploadProgress(0);
+  };
+
   const handleUpload = async (e) => {
     e.preventDefault();
     if (!file) return;
     setLoading(true); setError(null);
-    const formData = new FormData(); formData.append('file', file); formData.append('apply_privacy', applyPrivacy);
+    simulateProgress();
+    
+    const formData = new FormData(); 
+    formData.append('file', file); 
+    formData.append('apply_privacy', applyPrivacy);
+    
     try {
       const res = await axios.post(`${API_BASE}/api/analyze`, formData, { headers: userToken ? { Authorization: `Bearer ${userToken}` } : {} });
-      setData(res.data.data);
+      finishProgress();
+      setTimeout(() => {
+        setData(res.data.data);
+        resetProgress();
+      }, 400); // Allow user to see 100% complete state briefly before dismounting UI
     } catch (err) {
+      resetProgress();
       setError(err.response?.data?.detail || "Connection error.");
       if (err.response?.status === 401) handleLogout(true);
-    } finally { setLoading(false); }
+    } finally { 
+      setLoading(false); 
+    }
+  };
+
+  const handleDemoTryout = async () => {
+    setLoading(true); setError(null);
+    simulateProgress();
+    try {
+      const res = await fetch('/demo.tcx');
+      const blob = await res.blob();
+      const formData = new FormData(); 
+      formData.append('file', new File([blob], 'demo.tcx')); 
+      formData.append('apply_privacy', applyPrivacy);
+      
+      const output = await axios.post(`${API_BASE}/api/analyze`, formData, { headers: userToken ? { Authorization: `Bearer ${userToken}` } : {} });
+      finishProgress();
+      setTimeout(() => {
+        setData(output.data.data);
+        resetProgress();
+      }, 400);
+    } catch (err) { 
+      resetProgress();
+      setError("Failed to load built-in demo."); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const handleRequestOTP = async (e) => {
@@ -226,20 +294,6 @@ function App() {
     }
   };
 
-  const handleDemoTryout = async () => {
-    setLoading(true); setError(null);
-    try {
-      const res = await fetch('/demo.tcx');
-      const blob = await res.blob();
-      const formData = new FormData(); formData.append('file', new File([blob], 'demo.tcx')); formData.append('apply_privacy', applyPrivacy);
-      const output = await axios.post(`${API_BASE}/api/analyze`, formData, { headers: userToken ? { Authorization: `Bearer ${userToken}` } : {} });
-      setData(output.data.data);
-    } catch (err) { 
-      setError("Failed to load built-in demo."); 
-    } finally { 
-      setLoading(false); 
-    }
-  };
 
   // --- EXPORT & SHARE FUNCTIONS ---
   const exportToCSV = () => {
@@ -346,6 +400,88 @@ function App() {
     </div>
   );
 
+  const renderCinematicTeaser = () => (
+    <div className={`relative w-full h-[380px] md:h-[500px] flex items-center justify-center overflow-hidden rounded-2xl shadow-sm border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'} perspective-[1200px]`}>
+      <style>{`
+        .iso-group {
+          transform: rotateX(55deg) rotateY(0deg) rotateZ(-45deg);
+          transform-style: preserve-3d;
+        }
+        .iso-card {
+          width: 260px;
+          height: 260px;
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          margin-top: -130px;
+          margin-left: -130px;
+          border-radius: 16px;
+          background: ${theme === 'dark' ? '#0f172a' : '#ffffff'};
+          border: 1px solid ${theme === 'dark' ? '#1e293b' : '#e2e8f0'};
+          box-shadow: ${theme === 'dark' ? '-20px 20px 30px rgba(0,0,0,0.5)' : '-20px 20px 30px rgba(0,0,0,0.1)'};
+          transition: all 0.3s ease;
+        }
+        @keyframes dotTrace {
+          0% { offset-distance: 0%; }
+          100% { offset-distance: 100%; }
+        }
+        @keyframes sweepCrosshair {
+          0%, 10% { left: 5%; }
+          90%, 100% { left: 95%; }
+        }
+        @keyframes pulseValue {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+        .trace-dot {
+          offset-path: path('M 20 220 Q 60 40 130 130 T 240 40');
+          animation: dotTrace 4s ease-in-out infinite alternate;
+        }
+      `}</style>
+
+      <div className="iso-group w-full h-full">
+        {/* BOTTOM CARD: Metrics Layer */}
+        <div className="iso-card flex flex-col justify-between p-5" style={{ transform: 'translateZ(-90px)' }}>
+          <div className="space-y-3">
+            <div className={`w-1/3 h-3 rounded ${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-200'}`} />
+            <div className="space-y-4 pt-4">
+              <div className="flex justify-between items-center"><div className={`w-1/2 h-2 rounded ${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-200'}`} /><div className="w-1/4 h-3 bg-emerald-400 rounded animate-[pulseValue_3s_infinite]" /></div>
+              <div className="flex justify-between items-center"><div className={`w-2/3 h-2 rounded ${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-200'}`} /><div className="w-1/5 h-3 bg-amber-400 rounded animate-[pulseValue_4s_infinite]" /></div>
+              <div className="flex justify-between items-center"><div className={`w-1/2 h-2 rounded ${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-200'}`} /><div className="w-1/3 h-3 bg-purple-400 rounded animate-[pulseValue_3.5s_infinite]" /></div>
+            </div>
+          </div>
+          <div className={`w-full h-8 rounded-lg ${theme === 'dark' ? 'bg-blue-900/20 border border-blue-800' : 'bg-blue-50 border border-blue-200'}`} />
+        </div>
+
+        {/* MIDDLE CARD: Elevation Chart Layer */}
+        <div className="iso-card overflow-hidden" style={{ transform: 'translateZ(0px)' }}>
+          <div className={`absolute bottom-0 w-full h-2/3 bg-gradient-to-t ${theme === 'dark' ? 'from-blue-900/40' : 'from-blue-200/40'} to-transparent`} />
+          <svg className="absolute bottom-0 w-full h-2/3" viewBox="0 0 100 50" preserveAspectRatio="none">
+            <path d="M 0 50 L 0 40 L 20 25 L 40 35 L 60 10 L 80 20 L 100 5 L 100 50 Z" fill={theme === 'dark' ? '#1e3a8a' : '#bfdbfe'} opacity="0.3" />
+            <path d="M 0 40 L 20 25 L 40 35 L 60 10 L 80 20 L 100 5" fill="none" stroke="#3b82f6" strokeWidth="1.5" />
+          </svg>
+          {/* Synchronized Sweeping Crosshair */}
+          <div className="absolute top-0 bottom-0 w-[1.5px] bg-blue-500/80 shadow-[0_0_8px_#3b82f6]" style={{ animation: 'sweepCrosshair 4s ease-in-out infinite alternate' }}>
+            <div className="absolute top-[40%] -left-[3px] w-2 h-2 rounded-full bg-blue-400 shadow-[0_0_5px_#60a5fa]" />
+          </div>
+        </div>
+
+        {/* TOP CARD: Map Polyline Layer */}
+        <div className="iso-card" style={{ transform: 'translateZ(90px)' }}>
+          <svg className="w-full h-full opacity-60" viewBox="0 0 260 260">
+            <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+              <path d="M 20 0 L 0 0 0 20" fill="none" stroke={theme === 'dark' ? '#334155' : '#e2e8f0'} strokeWidth="0.5"/>
+            </pattern>
+            <rect width="260" height="260" fill="url(#grid)" />
+            <path d="M 20 220 Q 60 40 130 130 T 240 40" fill="none" stroke="#3b82f6" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          {/* Synchronized Moving Dot along Path */}
+          <div className="trace-dot absolute w-3.5 h-3.5 rounded-full bg-amber-400 shadow-[0_0_12px_#fbbf24] border-2 border-white dark:border-slate-900 -ml-[7px] -mt-[7px]" />
+        </div>
+      </div>
+    </div>
+  );
+
   // ---------------------------------------------------------------------------
   // NEW DASHBOARD LANDING ARCHITECTURE (UNIFIED MULTI-COLUMN)
   // ---------------------------------------------------------------------------
@@ -376,15 +512,12 @@ function App() {
         {/* Dashboard Grid Container */}
         <div className="w-full max-w-[1200px] flex flex-col space-y-6">
            
-           {/* Section 1: Features Header Block */}
-           <div className={`w-full p-6 rounded-2xl shadow-sm border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'}`}>
-              <h2 className="text-xs font-black uppercase tracking-wider flex items-center opacity-80 mb-4"><Sparkles className="w-4 h-4 mr-1.5 text-blue-500" /> Quick Start & Feature Highlights</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div><h3 className="text-[11px] font-black uppercase tracking-wider text-blue-500 mb-1">📁 Multi-Format Activity Import</h3><p className="text-xs text-slate-400 leading-normal font-medium">Upload .FIT or .TCX files, or connect to Strava to access your activities.</p></div>
-                <div><h3 className="text-[11px] font-black uppercase tracking-wider text-emerald-500 mb-1">🔒 Smart Privacy Masking</h3><p className="text-xs text-slate-400 leading-normal font-medium">Keeps sensitive locations private when sharing; by clipping the start and end, 500m, of your route.</p></div>
-                <div><h3 className="text-[11px] font-black uppercase tracking-wider text-purple-500 mb-1">📊 Deep Workout Analytics</h3><p className="text-xs text-slate-400 leading-normal font-medium">Track peak rolling intervals (400m, 1K, 5K), km splits, and aerobic efficiency (EF).</p></div>
-                <div><h3 className="text-[11px] font-black uppercase tracking-wider text-amber-500 mb-1">👁️ Activity Insights Map</h3><p className="text-xs text-slate-400 leading-normal font-medium">Map your run with precision - track exactly where your heart rate peaked, cadence dropped, and pace shifted.</p></div>
+           {/* Section 1: Cinematic Isometric Teaser Block */}
+           <div className={`w-full p-4 md:p-6 rounded-2xl shadow-sm border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <div className="flex flex-col md:flex-row justify-between items-center mb-4 opacity-80">
+                <h2 className="text-xs font-black uppercase tracking-wider flex items-center"><Sparkles className="w-4 h-4 mr-1.5 text-blue-500" /> Spatial-Temporal Sync Engine</h2>
               </div>
+              {renderCinematicTeaser()}
               <div className={`mt-5 p-4 rounded-xl border text-xs leading-relaxed font-medium ${theme === 'dark' ? 'bg-slate-900/20 border-slate-800/60 text-slate-400' : 'bg-slate-100/60 border-slate-200 text-slate-500'}`}>
                 <span className="font-black text-slate-700 dark:text-slate-200 block mb-1">🛡️ Privacy Isolation Guard:</span> Your workouts are processed in secure, temporary memory. For saved history, emails are converted into irreversible cryptographic signatures—so your identity and location stay protected. Your email is never stored!
               </div>
@@ -393,7 +526,7 @@ function App() {
            {/* Section 2: Upload and Data LEDGERS Container */}
            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch pb-10">
               
-              {/* Left Column: Dedicated Upload Module */}
+              {/* Left Column: Dedicated Upload Module with Simulated Progress */}
               <div className={`p-6 md:p-8 rounded-2xl shadow-xl border w-full flex flex-col justify-center ${theme === 'dark' ? 'bg-slate-900 border-slate-800/80' : 'bg-white border-slate-200'}`}>
                 <form onSubmit={handleUpload} className="flex flex-col items-center space-y-6">
                   <div className={`p-4 rounded-full ${theme === 'dark' ? 'bg-slate-950' : 'bg-blue-50'}`}><UploadCloud className={`w-10 h-10 ${theme === 'dark' ? 'text-slate-500' : 'text-blue-500'}`} /></div>
@@ -401,13 +534,28 @@ function App() {
                     <h2 className="text-sm font-black uppercase tracking-wider">Upload Local File</h2>
                     <p className="text-xs text-slate-400 mt-1">Drop a high-resolution .tcx or .fit tracking stream asset</p>
                   </div>
-                  <input type="file" accept=".tcx,.fit" onChange={handleFileChange} className={`text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black w-full cursor-pointer border p-2 rounded-xl ${theme === 'dark' ? 'text-slate-400 border-slate-800 file:bg-slate-800 file:text-slate-200' : 'text-slate-500 border-slate-100 file:bg-blue-50 file:text-blue-700 shadow-inner'}`} />
+                  <input type="file" accept=".tcx,.fit" onChange={handleFileChange} disabled={isSimulatingProgress} className={`text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black w-full cursor-pointer border p-2 rounded-xl disabled:opacity-50 ${theme === 'dark' ? 'text-slate-400 border-slate-800 file:bg-slate-800 file:text-slate-200' : 'text-slate-500 border-slate-100 file:bg-blue-50 file:text-blue-700 shadow-inner'}`} />
                   <div className={`w-full flex items-center justify-between p-3 border rounded-xl relative group ${theme === 'dark' ? 'bg-slate-950/40 border-slate-800' : 'bg-slate-50/50 border-slate-200'}`}>
-                    <label className="flex items-center space-x-2.5 text-xs font-bold cursor-pointer"><input type="checkbox" checked={applyPrivacy} onChange={(e) => setApplyPrivacy(e.target.checked)} className="w-4 h-4 text-blue-600 rounded focus:ring-0" /><span>Enable home obfuscation mask</span></label>
+                    <label className="flex items-center space-x-2.5 text-xs font-bold cursor-pointer"><input type="checkbox" checked={applyPrivacy} onChange={(e) => setApplyPrivacy(e.target.checked)} disabled={isSimulatingProgress} className="w-4 h-4 text-blue-600 rounded focus:ring-0 disabled:opacity-50" /><span>Enable home obfuscation mask</span></label>
                     <Info className="w-4 h-4 text-slate-400" />
                   </div>
-                  <button type="submit" disabled={!file || loading} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs uppercase tracking-wider disabled:opacity-30 shadow-md shadow-blue-600/10">{loading ? 'Executing Engine Models...' : 'Analyze Run Workspace'}</button>
-                  <button type="button" onClick={handleDemoTryout} disabled={loading} className="text-xs text-blue-500 hover:underline font-bold">Launch Built-In Demo Workspace</button>
+                  
+                  {isSimulatingProgress ? (
+                    <div className="w-full space-y-2 mt-2">
+                      <div className="flex justify-between text-[10px] font-black uppercase tracking-wider text-blue-500">
+                        <span>Parsing Telemetry Array...</span>
+                        <span>{Math.round(uploadProgress)}%</span>
+                      </div>
+                      <div className={`w-full h-2.5 rounded-full overflow-hidden border ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-slate-100 border-slate-200'}`}>
+                        <div className="h-full bg-blue-500 transition-all duration-150 ease-out" style={{ width: `${uploadProgress}%` }} />
+                      </div>
+                    </div>
+                  ) : (
+                    <button type="submit" disabled={!file || loading} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs uppercase tracking-wider disabled:opacity-30 shadow-md shadow-blue-600/10">
+                      Analyze Run Workspace
+                    </button>
+                  )}
+                  <button type="button" onClick={handleDemoTryout} disabled={loading || isSimulatingProgress} className="text-xs text-blue-500 hover:underline font-bold disabled:opacity-50">Launch Built-In Demo Workspace</button>
                 </form>
                 {error && <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-xs font-bold text-center">{error}</div>}
               </div>
@@ -437,7 +585,7 @@ function App() {
                         </div>
                       ) : (
                         <div className="text-center">
-                           <button type="button" disabled={loading} onClick={() => { const redirectURI = encodeURIComponent("https://motion-map-analyzer-appv2.vercel.app"); window.location.href = `https://www.strava.com/oauth/authorize?client_id=${import.meta.env.VITE_STRAVA_CLIENT_ID || '260297'}&response_type=code&redirect_uri=${redirectURI}&approval_prompt=auto&scope=activity:read_all`; }} className="px-4 py-2.5 bg-[#FC6100] text-white text-xs font-black rounded-xl shadow-md border-0 w-full">Authenticate via Strava OAuth</button>
+                           <button type="button" disabled={loading || isSimulatingProgress} onClick={() => { const redirectURI = encodeURIComponent("https://motion-map-analyzer-appv2.vercel.app"); window.location.href = `https://www.strava.com/oauth/authorize?client_id=${import.meta.env.VITE_STRAVA_CLIENT_ID || '260297'}&response_type=code&redirect_uri=${redirectURI}&approval_prompt=auto&scope=activity:read_all`; }} className="px-4 py-2.5 bg-[#FC6100] text-white text-xs font-black rounded-xl shadow-md border-0 w-full disabled:opacity-50">Authenticate via Strava OAuth</button>
                         </div>
                       )
                     )}
