@@ -461,12 +461,13 @@ function App() {
                  <div className="lg:col-span-7 relative h-[400px] md:h-[450px] flex items-center justify-center bg-slate-50/50 dark:bg-slate-950/40 perspective-[1200px] overflow-hidden">
                     <style>{`
                       .iso-container {
-                        transform: rotateX(55deg) rotateY(0deg) rotateZ(-45deg) scale(0.9);
+                        transform: rotateX(55deg) rotateY(0deg) rotateZ(-45deg) scale(1.1); /* Increased scale */
                         transform-style: preserve-3d;
                         position: relative;
-                        width: 320px;
-                        height: 200px;
+                        width: 400px;  /* Increased width */
+                        height: 260px; /* Increased height */
                       }
+                      
                       .iso-layer {
                         position: absolute;
                         top: 0; left: 0; right: 0; bottom: 0;
@@ -475,7 +476,7 @@ function App() {
                         background-position: center top;
                         background-repeat: no-repeat;
                         border: 1px solid ${theme === 'dark' ? 'rgba(30, 41, 59, 0.8)' : 'rgba(226, 232, 240, 0.8)'};
-                        box-shadow: ${theme === 'dark' ? '-25px 25px 40px rgba(0,0,0,0.6)' : '-25px 25px 40px rgba(0,0,0,0.1)'};
+                        box-shadow: ${theme === 'dark' ? '-35px 35px 50px rgba(0,0,0,0.6)' : '-35px 35px 50px rgba(0,0,0,0.1)'};
                         animation: floatLayer 6s ease-in-out infinite;
                       }
                       @keyframes floatLayer {
