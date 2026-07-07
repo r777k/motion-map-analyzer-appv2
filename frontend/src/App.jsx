@@ -124,10 +124,16 @@ function App() {
   const handleLoadStravaActivity = async (id) => {
     if (!userToken) return;
     setLoading(true); setError(null);
+    simulateProgress(); // Trigger progress bar
     try {
       const res = await axios.get(`${API_BASE}/api/strava/analyze-activity/${id}`, { headers: { Authorization: `Bearer ${userToken}` } });
-      setData(res.data.data);
+      finishProgress(); // Snap to 100%
+      setTimeout(() => {
+        setData(res.data.data);
+        resetProgress(); // Cleanup and transition
+      }, 400);
     } catch (err) {
+      resetProgress(); // Cleanup on error
       setError("Failed to download telemetry from Strava.");
       if (err.response?.status === 401) handleLogout(true);
     } finally { setLoading(false); }
@@ -152,10 +158,16 @@ function App() {
   const handleLoadSavedActivity = async (id) => {
     if (!userToken) return;
     setLoading(true); setError(null);
+    simulateProgress(); // Trigger progress bar
     try {
       const res = await axios.get(`${API_BASE}/api/activities/${id}`, { headers: { Authorization: `Bearer ${userToken}` } });
-      setData({ ...res.data.data, id });
+      finishProgress(); // Snap to 100%
+      setTimeout(() => {
+        setData({ ...res.data.data, id });
+        resetProgress(); // Cleanup and transition
+      }, 400);
     } catch (err) {
+      resetProgress(); // Cleanup on error
       setError("Failed to stream saved profile.");
       if (err.response?.status === 401) handleLogout(true);
     } finally { setLoading(false); }
@@ -400,83 +412,97 @@ function App() {
     </div>
   );
 
-  const renderCinematicTeaser = () => (
+const renderCinematicTeaser = () => (
     <div className={`relative w-full h-[380px] md:h-[500px] flex items-center justify-center overflow-hidden rounded-2xl shadow-sm border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'} perspective-[1200px]`}>
       <style>{`
         .iso-group {
-          transform: rotateX(55deg) rotateY(0deg) rotateZ(-45deg);
+          transform: rotateX(55deg) rotateY(0deg) rotateZ(-45deg) scale(0.9);
           transform-style: preserve-3d;
         }
         .iso-card {
-          width: 260px;
-          height: 260px;
+          width: 320px;
+          height: 240px;
           position: absolute;
           top: 50%;
           left: 50%;
-          margin-top: -130px;
-          margin-left: -130px;
-          border-radius: 16px;
+          margin-top: -120px;
+          margin-left: -160px;
+          border-radius: 12px;
           background: ${theme === 'dark' ? '#0f172a' : '#ffffff'};
           border: 1px solid ${theme === 'dark' ? '#1e293b' : '#e2e8f0'};
-          box-shadow: ${theme === 'dark' ? '-20px 20px 30px rgba(0,0,0,0.5)' : '-20px 20px 30px rgba(0,0,0,0.1)'};
-          transition: all 0.3s ease;
-        }
-        @keyframes dotTrace {
-          0% { offset-distance: 0%; }
-          100% { offset-distance: 100%; }
+          box-shadow: ${theme === 'dark' ? '-25px 25px 40px rgba(0,0,0,0.6)' : '-25px 25px 40px rgba(0,0,0,0.1)'};
+          overflow: hidden;
         }
         @keyframes sweepCrosshair {
           0%, 10% { left: 5%; }
           90%, 100% { left: 95%; }
         }
-        @keyframes pulseValue {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
+        @keyframes dotTrace {
+          0%, 10% { offset-distance: 0%; }
+          90%, 100% { offset-distance: 100%; }
         }
         .trace-dot {
-          offset-path: path('M 20 220 Q 60 40 130 130 T 240 40');
-          animation: dotTrace 4s ease-in-out infinite alternate;
+          /* Exact exact match to the SVG Map Path below */
+          offset-path: path('M 50 180 C 30 100, 100 40, 160 50 C 240 60, 280 150, 220 200 C 150 250, 70 260, 50 180 Z');
+          animation: dotTrace 6s ease-in-out infinite alternate;
         }
       `}</style>
 
       <div className="iso-group w-full h-full">
-        {/* BOTTOM CARD: Metrics Layer */}
-        <div className="iso-card flex flex-col justify-between p-5" style={{ transform: 'translateZ(-90px)' }}>
+        {/* BOTTOM CARD: High-Fidelity Performance Stats Replica */}
+        <div className="iso-card flex flex-col p-4" style={{ transform: 'translateZ(-100px)' }}>
+          <div className={`w-32 h-3 rounded mb-4 ${theme === 'dark' ? 'bg-slate-700' : 'bg-slate-200'}`} />
           <div className="space-y-3">
-            <div className={`w-1/3 h-3 rounded ${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-200'}`} />
-            <div className="space-y-4 pt-4">
-              <div className="flex justify-between items-center"><div className={`w-1/2 h-2 rounded ${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-200'}`} /><div className="w-1/4 h-3 bg-emerald-400 rounded animate-[pulseValue_3s_infinite]" /></div>
-              <div className="flex justify-between items-center"><div className={`w-2/3 h-2 rounded ${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-200'}`} /><div className="w-1/5 h-3 bg-amber-400 rounded animate-[pulseValue_4s_infinite]" /></div>
-              <div className="flex justify-between items-center"><div className={`w-1/2 h-2 rounded ${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-200'}`} /><div className="w-1/3 h-3 bg-purple-400 rounded animate-[pulseValue_3.5s_infinite]" /></div>
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className={`flex items-center justify-between p-2 rounded border ${theme === 'dark' ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+                <div className={`w-8 h-2 rounded ${theme === 'dark' ? 'bg-slate-600' : 'bg-slate-300'}`} />
+                <div className={`w-12 h-2 rounded ${theme === 'dark' ? 'bg-slate-600' : 'bg-slate-300'}`} />
+                <div className="w-16 h-2 rounded bg-blue-500/80" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* MIDDLE CARD: Realistic Elevation Profile Replica */}
+        <div className="iso-card flex flex-col relative" style={{ transform: 'translateZ(0px)' }}>
+          <div className={`px-4 pt-4 pb-2 border-b ${theme === 'dark' ? 'border-slate-800 text-slate-400' : 'border-slate-100 text-slate-500'}`}>
+            <div className={`w-24 h-2.5 rounded ${theme === 'dark' ? 'bg-slate-700' : 'bg-slate-200'}`} />
+          </div>
+          <div className="flex-1 relative w-full h-full">
+            <div className={`absolute bottom-0 w-full h-[85%] bg-gradient-to-t ${theme === 'dark' ? 'from-blue-900/50' : 'from-blue-200/50'} to-transparent`} />
+            <svg className="absolute bottom-0 w-full h-full" viewBox="0 0 100 50" preserveAspectRatio="none">
+              <path d="M 0 50 L 0 45 L 15 42 L 25 25 L 35 30 L 45 15 L 55 20 L 70 5 L 85 18 L 100 10 L 100 50 Z" fill={theme === 'dark' ? '#1e3a8a' : '#bfdbfe'} opacity="0.4" />
+              <path d="M 0 45 L 15 42 L 25 25 L 35 30 L 45 15 L 55 20 L 70 5 L 85 18 L 100 10" fill="none" stroke="#3b82f6" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+            </svg>
+            {/* Synchronized Sweeping Crosshair */}
+            <div className="absolute top-0 bottom-0 w-[1px] bg-blue-500/80 shadow-[0_0_8px_#3b82f6] z-10" style={{ animation: 'sweepCrosshair 6s ease-in-out infinite alternate' }}>
+              <div className={`absolute top-2 -left-[35px] px-2 py-1 rounded text-[8px] font-bold ${theme === 'dark' ? 'bg-slate-950 text-white border border-slate-700' : 'bg-white text-slate-800 shadow-md'}`}>184 bpm</div>
             </div>
           </div>
-          <div className={`w-full h-8 rounded-lg ${theme === 'dark' ? 'bg-blue-900/20 border border-blue-800' : 'bg-blue-50 border border-blue-200'}`} />
         </div>
 
-        {/* MIDDLE CARD: Elevation Chart Layer */}
-        <div className="iso-card overflow-hidden" style={{ transform: 'translateZ(0px)' }}>
-          <div className={`absolute bottom-0 w-full h-2/3 bg-gradient-to-t ${theme === 'dark' ? 'from-blue-900/40' : 'from-blue-200/40'} to-transparent`} />
-          <svg className="absolute bottom-0 w-full h-2/3" viewBox="0 0 100 50" preserveAspectRatio="none">
-            <path d="M 0 50 L 0 40 L 20 25 L 40 35 L 60 10 L 80 20 L 100 5 L 100 50 Z" fill={theme === 'dark' ? '#1e3a8a' : '#bfdbfe'} opacity="0.3" />
-            <path d="M 0 40 L 20 25 L 40 35 L 60 10 L 80 20 L 100 5" fill="none" stroke="#3b82f6" strokeWidth="1.5" />
-          </svg>
-          {/* Synchronized Sweeping Crosshair */}
-          <div className="absolute top-0 bottom-0 w-[1.5px] bg-blue-500/80 shadow-[0_0_8px_#3b82f6]" style={{ animation: 'sweepCrosshair 4s ease-in-out infinite alternate' }}>
-            <div className="absolute top-[40%] -left-[3px] w-2 h-2 rounded-full bg-blue-400 shadow-[0_0_5px_#60a5fa]" />
+        {/* TOP CARD: Leaflet Route Map Replica */}
+        <div className="iso-card relative" style={{ transform: 'translateZ(100px)' }}>
+          {/* Map Grid Background */}
+          <div className={`absolute inset-0 opacity-40 ${theme === 'dark' ? 'bg-[#0f172a]' : 'bg-[#f8fafc]'}`} style={{ backgroundImage: `radial-gradient(${theme === 'dark' ? '#334155' : '#cbd5e1'} 1px, transparent 1px)`, backgroundSize: '20px 20px' }} />
+          
+          {/* Mock Map Controls */}
+          <div className={`absolute top-3 left-3 flex flex-col space-y-1`}>
+             <div className={`w-6 h-6 rounded shadow-sm border ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`} />
+             <div className={`w-6 h-6 rounded shadow-sm border ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`} />
           </div>
-        </div>
 
-        {/* TOP CARD: Map Polyline Layer */}
-        <div className="iso-card" style={{ transform: 'translateZ(90px)' }}>
-          <svg className="w-full h-full opacity-60" viewBox="0 0 260 260">
-            <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-              <path d="M 20 0 L 0 0 0 20" fill="none" stroke={theme === 'dark' ? '#334155' : '#e2e8f0'} strokeWidth="0.5"/>
-            </pattern>
-            <rect width="260" height="260" fill="url(#grid)" />
-            <path d="M 20 220 Q 60 40 130 130 T 240 40" fill="none" stroke="#3b82f6" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+          <svg className="w-full h-full relative z-10" viewBox="0 0 320 240">
+            {/* Closed Loop Route Path */}
+            <path d="M 50 180 C 30 100, 100 40, 160 50 C 240 60, 280 150, 220 200 C 150 250, 70 260, 50 180 Z" fill="none" stroke="#3b82f6" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+            
+            {/* Mock Markers */}
+            <circle cx="160" cy="50" r="4" fill="#3b82f6" stroke="white" strokeWidth="2" />
+            <circle cx="220" cy="200" r="4" fill="#3b82f6" stroke="white" strokeWidth="2" />
           </svg>
+
           {/* Synchronized Moving Dot along Path */}
-          <div className="trace-dot absolute w-3.5 h-3.5 rounded-full bg-amber-400 shadow-[0_0_12px_#fbbf24] border-2 border-white dark:border-slate-900 -ml-[7px] -mt-[7px]" />
+          <div className="trace-dot absolute z-20 w-3 h-3 rounded-full bg-amber-400 shadow-[0_0_10px_#fbbf24] border-2 border-white dark:border-slate-900 -ml-[6px] -mt-[6px]" />
         </div>
       </div>
     </div>
