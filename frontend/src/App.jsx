@@ -13,6 +13,14 @@ import ElevationProfile from './components/ElevationProfile';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
+const FEATURE_LIST = [
+  { id: 'f1', icon: '📁', title: 'Multi-Format Activity Import', desc: 'Upload .FIT or .TCX files, or connect to Strava to access your activities.', color: 'text-blue-500' },
+  { id: 'f2', icon: '🔒', title: 'Smart Privacy Masking', desc: 'Keeps sensitive locations private when sharing; by clipping the start and end, 500m, of your route.', color: 'text-emerald-500' },
+  { id: 'f3', icon: '📊', title: 'Deep Workout Analytics', desc: 'Track peak rolling intervals (400m, 1K, 5K), km splits, and aerobic efficiency (EF).', color: 'text-purple-500' },
+  { id: 'f4', icon: '👁️', title: 'Activity Insights Map', desc: 'Map your run with precision - track exactly where your heart rate peaked, cadence dropped, and pace shifted.', color: 'text-amber-500' },
+  { id: 'f5', icon: '🛡️', title: 'Privacy Isolation Guard', desc: 'Your workouts are processed in secure, temporary memory. For saved history, emails are converted into irreversible cryptographic signatures—so your identity and location stay protected. Your email is never stored!', color: 'text-slate-500' }
+];
+
 function App() {
   // --- CORE WORKSPACE STATE ---
   const [file, setFile] = useState(null);
@@ -60,7 +68,6 @@ function App() {
 
   const [activeHighlight, setActiveHighlight] = useState(null);
 
-  // Responsive defaults
   useEffect(() => {
     if (window.innerWidth < 1024) setMapConfig(prev => ({ ...prev, thickness: 'thin' }));
   }, []);
@@ -103,7 +110,6 @@ function App() {
     }
   }, [userToken]);
 
-  // Strava OAuth Exchange Hook
   useEffect(() => {
     const stravaCode = new URLSearchParams(window.location.search).get("code");
     if (stravaCode) {
@@ -121,32 +127,46 @@ function App() {
     }
   }, []);
 
+  const simulateProgress = () => {
+    setIsSimulatingProgress(true);
+    setUploadProgress(0);
+    let currentProgress = 0;
+    progressIntervalRef.current = setInterval(() => {
+      if (currentProgress < 85) currentProgress += Math.random() * 12; 
+      else if (currentProgress < 95) currentProgress += Math.random() * 1.5; 
+      if (currentProgress > 95) currentProgress = 95;
+      setUploadProgress(currentProgress);
+    }, 150);
+  };
+
+  const finishProgress = () => {
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    setUploadProgress(100);
+  };
+
+  const resetProgress = () => {
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    setIsSimulatingProgress(false);
+    setUploadProgress(0);
+  };
+
   const handleLoadStravaActivity = async (id) => {
     if (!userToken) return;
     setLoading(true); setError(null);
-    simulateProgress(); // Trigger progress bar
+    simulateProgress();
     try {
       const res = await axios.get(`${API_BASE}/api/strava/analyze-activity/${id}`, { headers: { Authorization: `Bearer ${userToken}` } });
-      finishProgress(); // Snap to 100%
+      finishProgress();
       setTimeout(() => {
         setData(res.data.data);
-        resetProgress(); // Cleanup and transition
+        resetProgress();
       }, 400);
     } catch (err) {
-      resetProgress(); // Cleanup on error
+      resetProgress();
       setError("Failed to download telemetry from Strava.");
       if (err.response?.status === 401) handleLogout(true);
     } finally { setLoading(false); }
   };
-
-  // Splitter Drag Logic
-  useEffect(() => {
-    if (!isDraggingSplitter) return;
-    const handleMouseMove = (e) => setSidebarWidth(Math.max(350, Math.min(750, e.clientX)));
-    const handleMouseUp = () => setIsDraggingSplitter(false);
-    document.addEventListener('mousemove', handleMouseMove); document.addEventListener('mouseup', handleMouseUp);
-    return () => { document.removeEventListener('mousemove', handleMouseMove); document.removeEventListener('mouseup', handleMouseUp); };
-  }, [isDraggingSplitter]);
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
@@ -158,16 +178,16 @@ function App() {
   const handleLoadSavedActivity = async (id) => {
     if (!userToken) return;
     setLoading(true); setError(null);
-    simulateProgress(); // Trigger progress bar
+    simulateProgress();
     try {
       const res = await axios.get(`${API_BASE}/api/activities/${id}`, { headers: { Authorization: `Bearer ${userToken}` } });
-      finishProgress(); // Snap to 100%
+      finishProgress();
       setTimeout(() => {
         setData({ ...res.data.data, id });
-        resetProgress(); // Cleanup and transition
+        resetProgress();
       }, 400);
     } catch (err) {
-      resetProgress(); // Cleanup on error
+      resetProgress();
       setError("Failed to stream saved profile.");
       if (err.response?.status === 401) handleLogout(true);
     } finally { setLoading(false); }
@@ -198,33 +218,6 @@ function App() {
     }
   };
 
-  // --- UPLOAD PROGRESS SIMULATION LOGIC ---
-  const simulateProgress = () => {
-    setIsSimulatingProgress(true);
-    setUploadProgress(0);
-    let currentProgress = 0;
-    progressIntervalRef.current = setInterval(() => {
-      if (currentProgress < 85) {
-        currentProgress += Math.random() * 12; // Rapid climb to 85% over ~1.5s
-      } else if (currentProgress < 95) {
-        currentProgress += Math.random() * 1.5; // Slow creep from 85% to 95%
-      }
-      if (currentProgress > 95) currentProgress = 95;
-      setUploadProgress(currentProgress);
-    }, 150);
-  };
-
-  const finishProgress = () => {
-    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-    setUploadProgress(100);
-  };
-
-  const resetProgress = () => {
-    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-    setIsSimulatingProgress(false);
-    setUploadProgress(0);
-  };
-
   const handleUpload = async (e) => {
     e.preventDefault();
     if (!file) return;
@@ -241,14 +234,12 @@ function App() {
       setTimeout(() => {
         setData(res.data.data);
         resetProgress();
-      }, 400); // Allow user to see 100% complete state briefly before dismounting UI
+      }, 400);
     } catch (err) {
       resetProgress();
       setError(err.response?.data?.detail || "Connection error.");
       if (err.response?.status === 401) handleLogout(true);
-    } finally { 
-      setLoading(false); 
-    }
+    } finally { setLoading(false); }
   };
 
   const handleDemoTryout = async () => {
@@ -270,9 +261,7 @@ function App() {
     } catch (err) { 
       resetProgress();
       setError("Failed to load built-in demo."); 
-    } finally { 
-      setLoading(false); 
-    }
+    } finally { setLoading(false); }
   };
 
   const handleRequestOTP = async (e) => {
@@ -282,11 +271,8 @@ function App() {
     try { 
       await axios.post(`${API_BASE}/api/auth/send-otp`, { email: authEmail }); 
       setAuthStep(2); 
-    } catch (err) { 
-      setAuthError(err.response?.data?.detail || "Failed to trigger mailing service.");  
-    } finally { 
-      setAuthLoading(false); 
-    }
+    } catch (err) { setAuthError(err.response?.data?.detail || "Failed to trigger mailing service."); } 
+    finally { setAuthLoading(false); }
   };
 
   const handleVerifyOTP = async (e) => {
@@ -299,23 +285,17 @@ function App() {
       setUserToken(res.data.access_token);
       setAuthModalOpen(false); setSessionExpired(false); setAuthEmail(''); setAuthOTP(''); setAuthStep(1);
       fetchUserHistoryList(res.data.access_token);
-    } catch (err) { 
-      setAuthError(err.response?.data?.detail || "Invalid authorization code.");
-    } finally { 
-      setAuthLoading(false); 
-    }
+    } catch (err) { setAuthError(err.response?.data?.detail || "Invalid authorization code."); } 
+    finally { setAuthLoading(false); }
   };
-
 
   // --- EXPORT & SHARE FUNCTIONS ---
   const exportToCSV = () => {
     if (!data) return;
     let csvContent = "";
     const appendHeader = (title) => { csvContent += `\n# --------------------------------------------------\n# ${title.toUpperCase()}\n# --------------------------------------------------\n`; };
-    
     appendHeader("Run Summary Overview"); csvContent += "Metric,Value\n";
     if (data.summary) Object.entries(data.summary).forEach(([k, v]) => { if (typeof v !== 'object') csvContent += `"${k.replace(/_/g, ' ')}","${v}"\n`; });
-    
     if (data.performance) {
       const p = data.performance;
       const rollingKey = Object.keys(p).find(k => k.includes("rolling") || k.includes("best"));
@@ -354,14 +334,10 @@ function App() {
       const downloadAnchor = document.createElement('a'); downloadAnchor.href = window.URL.createObjectURL(new Blob([res.data], { type: 'image/png' }));
       downloadAnchor.download = `MotionMap_Card_${data.summary?.start_time?.split(' ')[0] || 'Run'}.png`;
       document.body.appendChild(downloadAnchor); downloadAnchor.click(); document.body.removeChild(downloadAnchor);
-    } catch (err) { 
-      alert("Failed to compile image card asset."); 
-    } finally { 
-      document.title = originalText; 
-    }
+    } catch (err) { alert("Failed to compile image card asset."); } 
+    finally { document.title = originalText; }
   };
 
-  // --- HELPER FORMATTERS ---
   const renderFormattedDuration = (seconds) => {
     const h = Math.floor(seconds / 3600), m = Math.floor((seconds % 3600) / 60), s = seconds % 60;
     return h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`;
@@ -384,7 +360,6 @@ function App() {
   const cumulativeDistance = historyItems.reduce((acc, curr) => acc + (curr.distance_km || 0), 0);
   const cumulativeDuration = historyItems.reduce((acc, curr) => acc + (curr.duration_s || 0), 0);
 
-  // --- UI COMPONENTS ---
   const authModalDialogMarkup = authModalOpen && (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-[9000] p-4 animate-fadeIn">
       <div className={`max-w-md w-full rounded-2xl border p-6 shadow-2xl relative ${theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-800'}`}>
@@ -412,104 +387,12 @@ function App() {
     </div>
   );
 
-  const renderCinematicTeaser = () => (
-    <div className={`relative w-full h-[380px] md:h-[500px] flex items-center justify-center overflow-hidden rounded-2xl shadow-sm border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'} perspective-[1200px]`}>
-      <style>{`
-        .iso-container {
-          transform: rotateX(55deg) rotateY(0deg) rotateZ(-45deg) scale(0.95);
-          transform-style: preserve-3d;
-          position: relative;
-          width: 340px;
-          height: 220px;
-        }
-        
-        .iso-layer {
-          position: absolute;
-          top: 0; left: 0; right: 0; bottom: 0;
-          border-radius: 12px;
-          background-size: cover;
-          background-position: center top;
-          background-repeat: no-repeat;
-          border: 1px solid ${theme === 'dark' ? 'rgba(30, 41, 59, 0.8)' : 'rgba(226, 232, 240, 0.8)'};
-          box-shadow: ${theme === 'dark' ? '-25px 25px 40px rgba(0,0,0,0.6)' : '-25px 25px 40px rgba(0,0,0,0.1)'};
-          
-          /* The floating animation uses a CSS variable for the Z-depth */
-          animation: floatLayer 6s ease-in-out infinite;
-        }
-
-        /* Subtle vertical floating effect */
-        @keyframes floatLayer {
-          0%, 100% { transform: translateZ(var(--z-offset)) translateY(0px); }
-          50% { transform: translateZ(var(--z-offset)) translateY(-12px); }
-        }
-
-        /* A glowing scanner line to keep the static images feeling dynamic */
-        .scanner-line {
-          position: absolute;
-          top: 0; bottom: 0;
-          width: 2px;
-          background: rgba(59, 130, 246, 0.8);
-          box-shadow: 0 0 15px rgba(59, 130, 246, 1);
-          animation: scan 4s ease-in-out infinite alternate;
-          z-index: 50;
-        }
-
-        @keyframes scan {
-          0% { left: 5%; opacity: 0; }
-          10% { opacity: 1; }
-          90% { opacity: 1; }
-          100% { left: 95%; opacity: 0; }
-        }
-      `}</style>
-
-      <div className="iso-container">
-        
-        {/* BOTTOM CARD: Stats Table Image */}
-        <div 
-          className="iso-layer" 
-          style={{ 
-            '--z-offset': '-110px', 
-            backgroundImage: "url('/stats-layer.png')",
-            backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
-            animationDelay: '0s'
-          }} 
-        />
-
-        {/* MIDDLE CARD: Elevation Chart Image */}
-        <div 
-          className="iso-layer overflow-hidden" 
-          style={{ 
-            '--z-offset': '0px', 
-            backgroundImage: "url('/chart-layer.png')",
-            backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
-            animationDelay: '0.2s'
-          }} 
-        >
-          {/* Animated playback scanner sweeping over the chart screenshot */}
-          <div className="scanner-line" />
-        </div>
-
-        {/* TOP CARD: Route Map Image */}
-        <div 
-          className="iso-layer" 
-          style={{ 
-            '--z-offset': '110px', 
-            backgroundImage: "url('/map-layer.png')",
-            backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
-            animationDelay: '0.4s'
-          }} 
-        />
-        
-      </div>
-    </div>
-  );
-
   // ---------------------------------------------------------------------------
-  // NEW DASHBOARD LANDING ARCHITECTURE (UNIFIED MULTI-COLUMN)
+  // DASHBOARD LANDING ARCHITECTURE
   // ---------------------------------------------------------------------------
   if (!data) {
     return (
-      <div className={`min-h-screen flex flex-col items-center p-4 md:p-8 relative ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
+      <div className={`min-h-screen flex flex-col items-center p-4 md:p-8 relative overflow-x-hidden ${theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
         
         {/* Absolute Floating Control Header */}
         <div className="absolute top-4 right-4 flex items-center space-x-2 z-50">
@@ -531,17 +414,96 @@ function App() {
           <div className="w-full max-w-md mb-4 p-3 rounded-xl border flex items-center space-x-2.5 bg-red-500/10 border-red-500/20 text-red-500 text-xs font-bold"><AlertTriangle className="w-4 h-4 flex-shrink-0" /><span className="flex-1">Session identity window has closed. Please request a fresh login code link.</span><X className="w-4 h-4 cursor-pointer" onClick={() => setSessionExpired(false)} /></div>
         )}
 
-        {/* Dashboard Grid Container */}
         <div className="w-full max-w-[1200px] flex flex-col space-y-6">
            
-           {/* Section 1: Cinematic Isometric Teaser Block */}
-           <div className={`w-full p-4 md:p-6 rounded-2xl shadow-sm border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'}`}>
-              <div className="flex flex-col md:flex-row justify-between items-center mb-4 opacity-80">
-                <h2 className="text-xs font-black uppercase tracking-wider flex items-center"><Sparkles className="w-4 h-4 mr-1.5 text-blue-500" /> Spatial-Temporal Sync Engine</h2>
-              </div>
-              {renderCinematicTeaser()}
-              <div className={`mt-5 p-4 rounded-xl border text-xs leading-relaxed font-medium ${theme === 'dark' ? 'bg-slate-900/20 border-slate-800/60 text-slate-400' : 'bg-slate-100/60 border-slate-200 text-slate-500'}`}>
-                <span className="font-black text-slate-700 dark:text-slate-200 block mb-1">🛡️ Privacy Isolation Guard:</span> Your workouts are processed in secure, temporary memory. For saved history, emails are converted into irreversible cryptographic signatures—so your identity and location stay protected. Your email is never stored!
+           {/* Section 1: Dynamic Hero (Marquee + 3D Teaser) */}
+           <div className={`w-full rounded-2xl shadow-sm border overflow-hidden ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-0">
+                 
+                 {/* Left Side: Infinite Scrolling Features */}
+                 <div className="lg:col-span-5 p-6 md:p-10 flex flex-col justify-center relative border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 h-[400px] md:h-[450px]">
+                    <h2 className="text-xs font-black uppercase tracking-wider flex items-center opacity-80 mb-6 flex-shrink-0"><Sparkles className="w-4 h-4 mr-1.5 text-blue-500" /> Quick Start & Feature Highlights</h2>
+                    
+                    <style>{`
+                      @keyframes scrollVertical {
+                        0% { transform: translateY(0); }
+                        100% { transform: translateY(-50%); }
+                      }
+                      .animate-marquee {
+                        animation: scrollVertical 25s linear infinite;
+                      }
+                      .marquee-container:hover .animate-marquee {
+                        animation-play-state: paused;
+                      }
+                    `}</style>
+
+                    <div className="relative flex-1 overflow-hidden marquee-container">
+                       {/* Top/Bottom Fade Masks */}
+                       <div className={`absolute top-0 left-0 w-full h-12 z-10 pointer-events-none bg-gradient-to-b ${theme === 'dark' ? 'from-slate-900/90' : 'from-white/90'} to-transparent`} />
+                       <div className={`absolute bottom-0 left-0 w-full h-12 z-10 pointer-events-none bg-gradient-to-t ${theme === 'dark' ? 'from-slate-900/90' : 'from-white/90'} to-transparent`} />
+                       
+                       {/* Scrolling Track (Duplicated for seamless loop) */}
+                       <div className="animate-marquee flex flex-col space-y-6 pb-6">
+                          {[...FEATURE_LIST, ...FEATURE_LIST].map((feature, idx) => (
+                             <div key={`${feature.id}-${idx}`} className="flex items-start space-x-3 opacity-90 hover:opacity-100 transition-opacity">
+                                <div className={`text-lg mt-0.5 ${feature.color}`}>{feature.icon}</div>
+                                <div>
+                                   <h3 className={`text-[11px] font-black uppercase tracking-wider mb-1 ${feature.color}`}>{feature.title}</h3>
+                                   <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">{feature.desc}</p>
+                                </div>
+                             </div>
+                          ))}
+                       </div>
+                    </div>
+                 </div>
+
+                 {/* Right Side: 3D Isometric Teaser */}
+                 <div className="lg:col-span-7 relative h-[400px] md:h-[450px] flex items-center justify-center bg-slate-50/50 dark:bg-slate-950/40 perspective-[1200px] overflow-hidden">
+                    <style>{`
+                      .iso-container {
+                        transform: rotateX(55deg) rotateY(0deg) rotateZ(-45deg) scale(0.9);
+                        transform-style: preserve-3d;
+                        position: relative;
+                        width: 320px;
+                        height: 200px;
+                      }
+                      .iso-layer {
+                        position: absolute;
+                        top: 0; left: 0; right: 0; bottom: 0;
+                        border-radius: 12px;
+                        background-size: cover;
+                        background-position: center top;
+                        background-repeat: no-repeat;
+                        border: 1px solid ${theme === 'dark' ? 'rgba(30, 41, 59, 0.8)' : 'rgba(226, 232, 240, 0.8)'};
+                        box-shadow: ${theme === 'dark' ? '-25px 25px 40px rgba(0,0,0,0.6)' : '-25px 25px 40px rgba(0,0,0,0.1)'};
+                        animation: floatLayer 6s ease-in-out infinite;
+                      }
+                      @keyframes floatLayer {
+                        0%, 100% { transform: translateZ(var(--z-offset)) translateY(0px); }
+                        50% { transform: translateZ(var(--z-offset)) translateY(-15px); }
+                      }
+                      .scanner-line {
+                        position: absolute; top: 0; bottom: 0; width: 2px;
+                        background: rgba(59, 130, 246, 0.8);
+                        box-shadow: 0 0 15px rgba(59, 130, 246, 1);
+                        animation: scan 4s ease-in-out infinite alternate;
+                        z-index: 50;
+                      }
+                      @keyframes scan {
+                        0% { left: 5%; opacity: 0; }
+                        10% { opacity: 1; }
+                        90% { opacity: 1; }
+                        100% { left: 95%; opacity: 0; }
+                      }
+                    `}</style>
+                    <div className="iso-container">
+                      <div className="iso-layer" style={{ '--z-offset': '-110px', backgroundImage: "url('/stats-layer.png')", backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff', animationDelay: '0s' }} />
+                      <div className="iso-layer overflow-hidden" style={{ '--z-offset': '0px', backgroundImage: "url('/chart-layer.png')", backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff', animationDelay: '0.2s' }}>
+                        <div className="scanner-line" />
+                      </div>
+                      <div className="iso-layer" style={{ '--z-offset': '110px', backgroundImage: "url('/map-layer.png')", backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff', animationDelay: '0.4s' }} />
+                    </div>
+                 </div>
               </div>
            </div>
 
