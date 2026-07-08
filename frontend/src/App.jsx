@@ -468,7 +468,8 @@ const renderCinematicTeaser = () => (
             '--z-offset': '0px', 
             backgroundImage: "url('/chart-layer.png')",
             backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
-            animationDelay: '0.2s'
+            animationDelay: '0.2s',
+            opacity: 0.5
           }} 
         />
 
@@ -478,7 +479,8 @@ const renderCinematicTeaser = () => (
           style={{ 
             '--z-offset': '110px', 
             backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
-            animationDelay: '0.4s'
+            animationDelay: '0.4s',
+            opacity: 0.5
           }} 
         />
       </div>
