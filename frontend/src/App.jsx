@@ -543,7 +543,7 @@ const renderCinematicTeaser = () => (
                        <div className={`absolute bottom-0 left-0 w-full h-12 z-10 pointer-events-none bg-gradient-to-t ${theme === 'dark' ? 'from-slate-900/90' : 'from-white/90'} to-transparent`} />
                        
                        {/* Scrolling Track (Duplicated for seamless loop) */}
-                       <div className="animate-marquee flex flex-col space-y-6 pb-6">
+                       <div className="animate-marquee flex flex-col space-y-6 pb-6 h-max will-change-transform">
                           {[...FEATURE_LIST, ...FEATURE_LIST].map((feature, idx) => (
                              <div key={`${feature.id}-${idx}`} className="flex items-start space-x-3 opacity-90 hover:opacity-100 transition-opacity">
                                 <div className={`text-lg mt-0.5 ${feature.color}`}>{feature.icon}</div>
