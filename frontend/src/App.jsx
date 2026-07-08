@@ -389,15 +389,14 @@ function App() {
     </div>
   );
 
-  const renderCinematicTeaser = () => (
+const renderCinematicTeaser = () => (
     <div className={`relative w-full h-[380px] md:h-[500px] flex items-center justify-center overflow-hidden rounded-2xl shadow-sm border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'} perspective-[1200px]`}>
       <style>{`
         .iso-container {
-          transform: rotateX(55deg) rotateY(0deg) rotateZ(-45deg) scale(1.1); /* Increased scale */
+          transform: rotateX(55deg) rotateY(0deg) rotateZ(-45deg) scale(1.1);
           transform-style: preserve-3d;
           position: relative;
-          width: 400px;  /* Increased width */
-          height: 260px; /* Increased height */
+          width: 400px; height: 260px;
         }
         
         .iso-layer {
@@ -405,56 +404,55 @@ function App() {
           top: 0; left: 0; right: 0; bottom: 0;
           border-radius: 12px;
           background-repeat: no-repeat;
-          /* Width 100% fits the bounds, height 'auto' allows vertical overflow */
-          background-size: 100% auto; 
           border: 1px solid ${theme === 'dark' ? 'rgba(30, 41, 59, 0.8)' : 'rgba(226, 232, 240, 0.8)'};
           box-shadow: ${theme === 'dark' ? '-35px 35px 50px rgba(0,0,0,0.6)' : '-35px 35px 50px rgba(0,0,0,0.1)'};
-          
-          /* Combine floating animation and vertical panning scroll */
+        }
+
+        /* 1. Vertical Scroll (For Stats) */
+        .layer-vertical {
+          background-size: 100% auto; 
           animation: floatLayer 6s ease-in-out infinite, scrollVertical 10s linear infinite alternate;
         }
 
-        /* Animation: Smooth Vertical Pan */
+        /* 2. Horizontal Scroll (For Elevation Chart) */
+        .layer-horizontal {
+          background-size: auto 100%; /* Height fits, width overflows */
+          animation: floatLayer 6s ease-in-out infinite, scrollHorizontal 15s linear infinite alternate;
+        }
+
+        /* 3. Map Cycling + Vertical Scroll */
+        .layer-map-cycle {
+          background-size: 100% auto;
+          animation: floatLayer 6s ease-in-out infinite, scrollVertical 12s linear infinite alternate, cycleMaps 9s infinite;
+        }
+
+        /* The Animation Keyframes */
         @keyframes scrollVertical {
           0% { background-position: 0% 0%; }
           100% { background-position: 0% 100%; }
         }
 
-        /* Animation: Float */
+        @keyframes scrollHorizontal {
+          0% { background-position: 0% 0%; }
+          100% { background-position: 100% 0%; }
+        }
+
         @keyframes floatLayer {
           0%, 100% { transform: translateZ(var(--z-offset)) translateY(0px); }
           50% { transform: translateZ(var(--z-offset)) translateY(-15px); }
         }
 
-        /* Animation: Map Cycling Logic */
         @keyframes cycleMaps {
           0%, 30% { background-image: url('/map-pace.png'); }
           35%, 65% { background-image: url('/map-cadence.png'); }
           70%, 100% { background-image: url('/map-splits.png'); }
         }
-        
-        .map-layer-cycle { 
-          animation: floatLayer 6s ease-in-out infinite, scrollVertical 10s linear infinite alternate, cycleMaps 9s infinite; 
-        }
-
-        .scanner-line {
-          position: absolute; top: 0; bottom: 0; width: 2px;
-          background: rgba(59, 130, 246, 0.8);
-          box-shadow: 0 0 15px rgba(59, 130, 246, 1);
-          animation: scan 4s ease-in-out infinite alternate;
-          z-index: 50;
-        }
-        @keyframes scan {
-          0% { left: 5%; opacity: 0; }
-          10% { opacity: 1; }
-          90% { opacity: 1; }
-          100% { left: 95%; opacity: 0; }
-        }
       `}</style>
+
       <div className="iso-container">
         {/* BOTTOM CARD: Stats (Scrolls vertically) */}
         <div 
-          className="iso-layer" 
+          className="iso-layer layer-vertical" 
           style={{ 
             '--z-offset': '-110px', 
             backgroundImage: "url('/stats-layer.png')",
@@ -463,23 +461,20 @@ function App() {
           }} 
         />
 
-        {/* MIDDLE CARD: Elevation (Scrolls vertically) */}
+        {/* MIDDLE CARD: Elevation (Scrolls horizontally) */}
         <div 
-          className="iso-layer overflow-hidden" 
+          className="iso-layer layer-horizontal" 
           style={{ 
             '--z-offset': '0px', 
             backgroundImage: "url('/chart-layer.png')",
             backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
             animationDelay: '0.2s'
           }} 
-        >
-          {/* Animated playback scanner sweeping over the chart screenshot */}
-          <div className="scanner-line" />
-        </div>
+        />
 
         {/* TOP CARD: Map (Cycles + Scrolls vertically) */}
         <div 
-          className="iso-layer map-layer-cycle" 
+          className="iso-layer layer-map-cycle" 
           style={{ 
             '--z-offset': '110px', 
             backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
