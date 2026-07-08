@@ -480,7 +480,7 @@ const renderCinematicTeaser = () => (
             '--z-offset': '110px', 
             backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
             animationDelay: '0.4s',
-            opacity: 0.5
+            opacity: 0.25
           }} 
         />
       </div>
