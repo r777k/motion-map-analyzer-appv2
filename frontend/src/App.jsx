@@ -68,6 +68,7 @@ function App() {
 
   const [activeHighlight, setActiveHighlight] = useState(null);
 
+  // Responsive defaults
   useEffect(() => {
     if (window.innerWidth < 1024) setMapConfig(prev => ({ ...prev, thickness: 'thin' }));
   }, []);
@@ -110,6 +111,7 @@ function App() {
     }
   }, [userToken]);
 
+  // Strava OAuth Exchange Hook
   useEffect(() => {
     const stravaCode = new URLSearchParams(window.location.search).get("code");
     if (stravaCode) {
@@ -387,6 +389,107 @@ function App() {
     </div>
   );
 
+  const renderCinematicTeaser = () => (
+    <div className={`relative w-full h-[380px] md:h-[500px] flex items-center justify-center overflow-hidden rounded-2xl shadow-sm border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'} perspective-[1200px]`}>
+      <style>{`
+        .iso-container {
+          transform: rotateX(55deg) rotateY(0deg) rotateZ(-45deg) scale(1.1); /* Increased scale */
+          transform-style: preserve-3d;
+          position: relative;
+          width: 400px;  /* Increased width */
+          height: 260px; /* Increased height */
+        }
+        
+        .iso-layer {
+          position: absolute;
+          top: 0; left: 0; right: 0; bottom: 0;
+          border-radius: 12px;
+          background-repeat: no-repeat;
+          /* Width 100% fits the bounds, height 'auto' allows vertical overflow */
+          background-size: 100% auto; 
+          border: 1px solid ${theme === 'dark' ? 'rgba(30, 41, 59, 0.8)' : 'rgba(226, 232, 240, 0.8)'};
+          box-shadow: ${theme === 'dark' ? '-35px 35px 50px rgba(0,0,0,0.6)' : '-35px 35px 50px rgba(0,0,0,0.1)'};
+          
+          /* Combine floating animation and vertical panning scroll */
+          animation: floatLayer 6s ease-in-out infinite, scrollVertical 10s linear infinite alternate;
+        }
+
+        /* Animation: Smooth Vertical Pan */
+        @keyframes scrollVertical {
+          0% { background-position: 0% 0%; }
+          100% { background-position: 0% 100%; }
+        }
+
+        /* Animation: Float */
+        @keyframes floatLayer {
+          0%, 100% { transform: translateZ(var(--z-offset)) translateY(0px); }
+          50% { transform: translateZ(var(--z-offset)) translateY(-15px); }
+        }
+
+        /* Animation: Map Cycling Logic */
+        @keyframes cycleMaps {
+          0%, 30% { background-image: url('/map-pace.png'); }
+          35%, 65% { background-image: url('/map-cadence.png'); }
+          70%, 100% { background-image: url('/map-splits.png'); }
+        }
+        
+        .map-layer-cycle { 
+          animation: floatLayer 6s ease-in-out infinite, scrollVertical 10s linear infinite alternate, cycleMaps 9s infinite; 
+        }
+
+        .scanner-line {
+          position: absolute; top: 0; bottom: 0; width: 2px;
+          background: rgba(59, 130, 246, 0.8);
+          box-shadow: 0 0 15px rgba(59, 130, 246, 1);
+          animation: scan 4s ease-in-out infinite alternate;
+          z-index: 50;
+        }
+        @keyframes scan {
+          0% { left: 5%; opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { left: 95%; opacity: 0; }
+        }
+      `}</style>
+      <div className="iso-container">
+        {/* BOTTOM CARD: Stats (Scrolls vertically) */}
+        <div 
+          className="iso-layer" 
+          style={{ 
+            '--z-offset': '-110px', 
+            backgroundImage: "url('/stats-layer.png')",
+            backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
+            animationDelay: '0s'
+          }} 
+        />
+
+        {/* MIDDLE CARD: Elevation (Scrolls vertically) */}
+        <div 
+          className="iso-layer overflow-hidden" 
+          style={{ 
+            '--z-offset': '0px', 
+            backgroundImage: "url('/chart-layer.png')",
+            backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
+            animationDelay: '0.2s'
+          }} 
+        >
+          {/* Animated playback scanner sweeping over the chart screenshot */}
+          <div className="scanner-line" />
+        </div>
+
+        {/* TOP CARD: Map (Cycles + Scrolls vertically) */}
+        <div 
+          className="iso-layer map-layer-cycle" 
+          style={{ 
+            '--z-offset': '110px', 
+            backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
+            animationDelay: '0.4s'
+          }} 
+        />
+      </div>
+    </div>
+  );
+
   // ---------------------------------------------------------------------------
   // DASHBOARD LANDING ARCHITECTURE
   // ---------------------------------------------------------------------------
@@ -459,51 +562,7 @@ function App() {
 
                  {/* Right Side: 3D Isometric Teaser */}
                  <div className="lg:col-span-7 relative h-[400px] md:h-[450px] flex items-center justify-center bg-slate-50/50 dark:bg-slate-950/40 perspective-[1200px] overflow-hidden">
-                    <style>{`
-                      .iso-container {
-                        transform: rotateX(55deg) rotateY(0deg) rotateZ(-45deg) scale(1.1); /* Increased scale */
-                        transform-style: preserve-3d;
-                        position: relative;
-                        width: 400px;  /* Increased width */
-                        height: 260px; /* Increased height */
-                      }
-                      
-                      .iso-layer {
-                        position: absolute;
-                        top: 0; left: 0; right: 0; bottom: 0;
-                        border-radius: 12px;
-                        background-size: cover;
-                        background-position: center top;
-                        background-repeat: no-repeat;
-                        border: 1px solid ${theme === 'dark' ? 'rgba(30, 41, 59, 0.8)' : 'rgba(226, 232, 240, 0.8)'};
-                        box-shadow: ${theme === 'dark' ? '-35px 35px 50px rgba(0,0,0,0.6)' : '-35px 35px 50px rgba(0,0,0,0.1)'};
-                        animation: floatLayer 6s ease-in-out infinite;
-                      }
-                      @keyframes floatLayer {
-                        0%, 100% { transform: translateZ(var(--z-offset)) translateY(0px); }
-                        50% { transform: translateZ(var(--z-offset)) translateY(-15px); }
-                      }
-                      .scanner-line {
-                        position: absolute; top: 0; bottom: 0; width: 2px;
-                        background: rgba(59, 130, 246, 0.8);
-                        box-shadow: 0 0 15px rgba(59, 130, 246, 1);
-                        animation: scan 4s ease-in-out infinite alternate;
-                        z-index: 50;
-                      }
-                      @keyframes scan {
-                        0% { left: 5%; opacity: 0; }
-                        10% { opacity: 1; }
-                        90% { opacity: 1; }
-                        100% { left: 95%; opacity: 0; }
-                      }
-                    `}</style>
-                    <div className="iso-container">
-                      <div className="iso-layer" style={{ '--z-offset': '-110px', backgroundImage: "url('/stats-layer.png')", backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff', animationDelay: '0s' }} />
-                      <div className="iso-layer overflow-hidden" style={{ '--z-offset': '0px', backgroundImage: "url('/chart-layer.png')", backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff', animationDelay: '0.2s' }}>
-                        <div className="scanner-line" />
-                      </div>
-                      <div className="iso-layer" style={{ '--z-offset': '110px', backgroundImage: "url('/map-layer.png')", backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff', animationDelay: '0.4s' }} />
-                    </div>
+                    {renderCinematicTeaser()}
                  </div>
               </div>
            </div>
@@ -637,7 +696,7 @@ function App() {
               <div className="flex items-center space-x-1.5 mt-2.5">
                 <button onClick={exportToCSV} className="px-2 py-1 text-[10px] font-bold rounded border dark:border-slate-700 bg-transparent"><Download className="w-3 h-3 inline mr-1" />Export CSV</button>
                 <button onClick={captureVisualSnapshot} className="px-2 py-1 text-[10px] font-bold rounded border dark:border-slate-700 bg-transparent"><Camera className="w-3 h-3 inline mr-1" />Share Card</button>
-                {userToken && data.summary?.start_time && (data.id ? <span className="px-2 py-1 text-[10px] font-black bg-emerald-600/10 text-emerald-500 rounded border border-emerald-500/10">✓ Synced Cloud Log</span> : <button onClick={handleSaveCurrentRun} className="px-2 py-1 text-[10px] font-black bg-blue-600 hover:bg-blue-700 text-white rounded shadow-sm">💾 Save to Account</button>)}
+                {userToken && data.summary?.start_time && (data.id ? <span className="px-2 py-1 text-[10px] font-black bg-emerald-600/10 text-emerald-500 rounded border border-emerald-500/10">✓ Saved</span> : <button onClick={handleSaveCurrentRun} className="px-2 py-1 text-[10px] font-black bg-blue-600 hover:bg-blue-700 text-white rounded shadow-sm">💾 Save to Account</button>)}
               </div>
             </div>
             <div className="flex items-center space-x-1.5">
