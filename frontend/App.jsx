@@ -389,7 +389,7 @@ function App() {
     </div>
   );
 
-const renderCinematicTeaser = () => (
+  const renderCinematicTeaser = () => (
     <div className={`relative w-full h-[380px] md:h-[500px] flex items-center justify-center overflow-hidden rounded-2xl shadow-sm border ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'} perspective-[1200px]`}>
       <style>{`
         .iso-container {
@@ -520,47 +520,47 @@ const renderCinematicTeaser = () => (
            <div className={`w-full rounded-2xl shadow-sm border overflow-hidden ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800' : 'bg-white border-slate-200'}`}>
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-0">
                  
-                {/* Left Side: Infinite Scrolling Features */} 
-                <div className="lg:col-span-5 p-6 md:p-10 flex flex-col relative border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 h-[400px] md:h-[450px]"> 
-                  <h2 className="text-xs font-black uppercase tracking-wider flex items-center opacity-80 mb-6 flex-shrink-0">
-                    <Sparkles className="w-4 h-4 mr-1.5 text-blue-500" /> Quick Start & Feature Highlights
-                  </h2> 
+                 {/* Left Side: Infinite Scrolling Features */}
+                 <div className="lg:col-span-5 p-6 md:p-10 flex flex-col relative border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 h-[400px] md:h-[450px]">
+                    <h2 className="text-xs font-black uppercase tracking-wider flex items-center opacity-80 mb-6 flex-shrink-0">
+                      <Sparkles className="w-4 h-4 mr-1.5 text-blue-500" /> Quick Start & Feature Highlights
+                    </h2>
+                    
+                    <style>{`
+                      @keyframes scrollVerticalList {
+                        0% { transform: translateY(0); }
+                        100% { transform: translateY(-50%); }
+                      }
+                      .animate-marquee {
+                        animation: scrollVerticalList 20s linear infinite;
+                      }
+                      .marquee-container:hover .animate-marquee {
+                        animation-play-state: paused;
+                      }
+                    `}</style>
 
-                  <style>{` 
-                    @keyframes scrollVerticalList { 
-                      0% { transform: translateY(0); } 
-                      100% { transform: translateY(-50%); } 
-                    } 
-                    .animate-marquee { 
-                      animation: scrollVerticalList 20s linear infinite; 
-                    } 
-                    .marquee-container:hover .animate-marquee { 
-                      animation-play-state: paused; 
-                    } 
-                  `}</style> 
+                    <div className="relative flex-1 overflow-hidden marquee-container">
+                       {/* Top/Bottom Fade Masks */}
+                       <div className={`absolute top-0 left-0 w-full h-12 z-20 pointer-events-none bg-gradient-to-b ${theme === 'dark' ? 'from-slate-900' : 'from-white'} to-transparent`} />
+                       <div className={`absolute bottom-0 left-0 w-full h-12 z-20 pointer-events-none bg-gradient-to-t ${theme === 'dark' ? 'from-slate-900' : 'from-white'} to-transparent`} />
+                       
+                       {/* Outer Absolute Wrapper to establish full boundary area */}
+                       <div className="absolute inset-0 w-full h-full">
+                         {/* Inner scrolling element remains relative to calculate its true 100% height */}
+                         <div className="animate-marquee flex flex-col gap-6 pb-6">
+                            {[...FEATURE_LIST, ...FEATURE_LIST].map((feature, idx) => (
+                               <div key={`${feature.id}-${idx}`} className="flex items-start space-x-3 opacity-90 hover:opacity-100 transition-opacity">
+                                  <div className={`text-lg mt-0.5 ${feature.color}`}>{feature.icon}</div>
+                                  <div>
+                                     <h3 className={`text-[11px] font-black uppercase tracking-wider mb-1 ${feature.color}`}>{feature.title}</h3>
+                                     <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">{feature.desc}</p>
+                                  </div>
+                               </div>
+                            ))}
+                         </div>
+                       </div>
 
-                  <div className="relative flex-1 overflow-hidden marquee-container"> 
-                    {/* Top/Bottom Fade Masks */} 
-                    <div className={`absolute top-0 left-0 w-full h-12 z-20 pointer-events-none bg-gradient-to-b ${theme === 'dark' ? 'from-slate-900' : 'from-white'} to-transparent`} /> 
-                    <div className={`absolute bottom-0 left-0 w-full h-12 z-20 pointer-events-none bg-gradient-to-t ${theme === 'dark' ? 'from-slate-900' : 'from-white'} to-transparent`} /> 
-
-                    {/* Outer Absolute Wrapper to establish full boundary area */} 
-                    <div className="absolute inset-0 w-full h-full">
-                      {/* Inner scrolling element remains relative to calculate its true 100% height */}
-                      <div className="animate-marquee flex flex-col gap-6 pb-6"> 
-                        {[...FEATURE_LIST, ...FEATURE_LIST].map((feature, idx) => ( 
-                          <div key={`${feature.id}-${idx}`} className="flex items-start space-x-3 opacity-90 hover:opacity-100 transition-opacity"> 
-                            <div className={`text-lg mt-0.5 ${feature.color}`}>{feature.icon}</div> 
-                            <div> 
-                              <h3 className={`text-[11px] font-black uppercase tracking-wider mb-1 ${feature.color}`}>{feature.title}</h3> 
-                              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">{feature.desc}</p> 
-                            </div> 
-                          </div> 
-                        ))} 
-                      </div> 
-                    </div>
-
-                  </div> 
+                 </div>
 
                  {/* Right Side: 3D Isometric Teaser */}
                  <div className="lg:col-span-7 relative h-[400px] md:h-[450px] flex items-center justify-center bg-slate-50/50 dark:bg-slate-950/40 perspective-[1200px] overflow-hidden">
