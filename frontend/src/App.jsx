@@ -507,7 +507,15 @@ function App() {
         <header className="flex flex-col items-center mb-6 mt-4 text-center select-none flex-shrink-0">
           <img src="/logo.png" alt="Logo" className="w-16 h-16 mb-2 drop-shadow-md" />
           <h1 className="text-2xl font-black tracking-tight">Motion Map Analyzer</h1>
-          <p className="text-[10px] font-black uppercase tracking-widest opacity-40 mt-0.5">Interactive Multi-Stream Telemetry Dashboard</p>
+          <p className="text-[10px] font-black uppercase tracking-widest mt-1">
+            <span style={{ color: '#FFD23F' }}>Perform</span>
+            <span className="opacity-40 text-slate-500 dark:text-slate-400 mx-1.5">.</span>
+            <span style={{ color: '#C5283D' }}>Visualize</span>
+            <span className="opacity-40 text-slate-500 dark:text-slate-400 mx-1.5">.</span>
+            <span style={{ color: '#3454D1' }}>Decode</span>
+            <span className="opacity-40 text-slate-500 dark:text-slate-400 mx-1.5">.</span>
+            <span style={{ color: '#0EAD69' }}>Optimize</span>
+        </p>
         </header>
 
         {sessionExpired && (
