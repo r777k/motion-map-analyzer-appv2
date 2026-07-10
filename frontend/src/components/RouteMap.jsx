@@ -405,7 +405,9 @@ export default function RouteMap({ segments, trackpoints, config, splits, active
       )}
 
       <MapContainer style={{ height: '100%', width: '100%' }} zoom={13} scrollWheelZoom={true} zoomControl={false}>
-        <TileLayer key={config.baseMap} url={BASE_MAPS[config.baseMap] || BASE_MAPS['Standard']} attribution='&copy; OpenStreetMap contributors' />
+        {config.baseMap !== 'No Map' && (
+          <TileLayer key={config.baseMap} url={BASE_MAPS[config.baseMap] || BASE_MAPS['Standard']} attribution='&copy; OpenStreetMap contributors' />
+        )}
         <FitBounds coords={allCoords} isMobileFrame={isMobileFrame} mobileDrawerOpen={mobileDrawerOpen} mobileTab={mobileTab} />
         <ZoomTracker onZoomChange={setCurrentZoom} />
 
