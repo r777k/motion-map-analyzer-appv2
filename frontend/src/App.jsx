@@ -468,7 +468,7 @@ const renderCinematicTeaser = () => (
             '--z-offset': '0px', 
             backgroundImage: "url('/chart-layer.png')",
             backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
-            animationDelay: '0.2s',
+            animationDelay: '0.2s'
             opacity: 0.5
           }} 
         />
@@ -479,7 +479,7 @@ const renderCinematicTeaser = () => (
           style={{ 
             '--z-offset': '110px', 
             backgroundColor: theme === 'dark' ? '#0f172a' : '#ffffff',
-            animationDelay: '0.4s',
+            animationDelay: '0.4s'
             opacity: 0.75
           }} 
         />
@@ -525,12 +525,13 @@ const renderCinematicTeaser = () => (
                     <h2 className="text-xs font-black uppercase tracking-wider flex items-center opacity-80 mb-6 flex-shrink-0"><Sparkles className="w-4 h-4 mr-1.5 text-blue-500" /> Quick Start & Feature Highlights</h2>
                     
                     <style>{`
-                      @keyframes scrollVertical {
+                      /* Renamed to scrollVerticalList to prevent collision with the 3D teaser */
+                      @keyframes scrollVerticalList {
                         0% { transform: translateY(0); }
                         100% { transform: translateY(-50%); }
                       }
                       .animate-marquee {
-                        animation: scrollVertical 25s linear infinite;
+                        animation: scrollVerticalList 25s linear infinite;
                       }
                       .marquee-container:hover .animate-marquee {
                         animation-play-state: paused;
