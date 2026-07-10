@@ -508,7 +508,7 @@ function App() {
           <img src="/logo.png" alt="Logo" className="w-16 h-16 mb-2 drop-shadow-md" />
           <h1 className="text-2xl font-black tracking-tight">Motion Map Analyzer</h1>
           <p className="text-[10px] font-black uppercase tracking-widest mt-1">
-            <span style={{ color: '#FFD23F' }}>Perform</span>
+            <span style={{ color: '#A27035' }}>Perform</span>
             <span className="opacity-40 text-slate-500 dark:text-slate-400 mx-1.5">.</span>
             <span style={{ color: '#C5283D' }}>Visualize</span>
             <span className="opacity-40 text-slate-500 dark:text-slate-400 mx-1.5">.</span>
