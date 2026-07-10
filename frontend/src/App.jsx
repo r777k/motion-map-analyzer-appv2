@@ -559,7 +559,7 @@ function App() {
                             ))}
                          </div>
                        </div>
-
+                    </div>
                  </div>
 
                  {/* Right Side: 3D Isometric Teaser */}
