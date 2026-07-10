@@ -735,6 +735,17 @@ function App() {
                <span className="text-[10px] font-black uppercase tracking-wider truncate max-w-[120px]">{data.summary?.location_city?.split(',')[0] || "Route View"}</span>
             </div>
             <div className="flex items-center space-x-1.5 pointer-events-auto">
+               
+               {/* --- ADDED MOBILE SAVE ACTIONS --- */}
+               {userToken && data.summary?.start_time && (
+                 data.id ? (
+                   <span className="px-2 py-1 text-[9px] font-black flex items-center bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-lg shadow-sm">✓ Saved</span>
+                 ) : (
+                   <button onClick={handleSaveCurrentRun} className="px-2 py-1 text-[9px] font-black flex items-center bg-blue-600 border border-blue-700 text-white rounded-lg shadow-sm active:bg-blue-700 transition-colors">💾 Save</button>
+                 )
+               )}
+               {/* ------------------------------- */}
+
                <button onClick={captureVisualSnapshot} title="Share Image Card" className="p-1.5 bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm text-slate-500 dark:text-slate-400 active:bg-slate-100"><Camera className="w-3.5 h-3.5" /></button>
                <button onClick={exportToCSV} title="Download CSV" className="p-1.5 bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm text-slate-500 dark:text-slate-400 active:bg-slate-100"><Download className="w-3.5 h-3.5" /></button>
                <button onClick={() => setMobileDrawerOpen(!mobileDrawerOpen)} className="p-1.5 bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm text-slate-500 dark:text-slate-400 active:bg-slate-100">
