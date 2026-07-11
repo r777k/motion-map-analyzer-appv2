@@ -270,10 +270,13 @@ function App() {
     e.preventDefault();
     if (!authEmail) return;
     setAuthLoading(true); setAuthError(null);
-    try { 
+    try {
       await axios.post(`${API_BASE}/api/auth/send-otp`, { email: authEmail }); 
       setAuthStep(2); 
-    } catch (err) { setAuthError(err.response?.data?.detail || "Failed to trigger mailing service."); } 
+    } catch (err) { 
+      console.error("API Connection Error:", err.message); // This will tell you if it's DNS/Timeout
+      setAuthError(err.response?.data?.detail || "Network issue: please check your connection. Unable to trigger mailing service"); 
+    }
     finally { setAuthLoading(false); }
   };
 
