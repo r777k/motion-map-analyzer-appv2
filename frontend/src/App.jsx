@@ -11,7 +11,7 @@ import RouteMap from './components/RouteMap';
 import MapControls from './components/MapControls';
 import ElevationProfile from './components/ElevationProfile';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://motion-map-analyzer-appv2-production.up.railway.app/';
 
 const FEATURE_LIST = [
   { id: 'f1', icon: '📁', title: 'Multi-Format Activity Import', desc: 'Upload .FIT or .TCX files, or connect to Strava to access your activities.', color: 'text-blue-500' },
