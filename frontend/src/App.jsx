@@ -96,6 +96,7 @@ function App() {
       setHistoryItems(res.data.history || []);
       setSessionExpired(false);
     } catch (err) {
+      console.error("API Connection Error:", err.message);
       if (err.response?.status === 401) handleLogout(true);
     } finally {
       setHistoryLoading(false);
@@ -165,6 +166,7 @@ function App() {
       }, 400);
     } catch (err) {
       resetProgress();
+      console.error("API Connection Error:", err.message);
       setError("Failed to download telemetry from Strava.");
       if (err.response?.status === 401) handleLogout(true);
     } finally { setLoading(false); }
@@ -190,6 +192,7 @@ function App() {
       }, 400);
     } catch (err) {
       resetProgress();
+      console.error("API Connection Error:", err.message);
       setError("Failed to stream saved profile.");
       if (err.response?.status === 401) handleLogout(true);
     } finally { setLoading(false); }
@@ -202,6 +205,7 @@ function App() {
       if (res.data?.activity_id) setData(prev => ({ ...prev, id: res.data.activity_id }));
       fetchUserHistoryList(userToken);
     } catch (err) {
+      console.error("API Connection Error:", err.message);
       alert("Failed to pin active workout.");
       if (err.response?.status === 401) handleLogout(true);
     }
@@ -215,6 +219,7 @@ function App() {
       setHistoryItems(prev => prev.filter(item => item.id !== id));
       if (data && data.id === id) handleCloseRun();
     } catch (err) {
+      console.error("API Connection Error:", err.message);
       alert("Failed to erase record.");
       if (err.response?.status === 401) handleLogout(true);
     }
@@ -238,6 +243,7 @@ function App() {
         resetProgress();
       }, 400);
     } catch (err) {
+      console.error("API Connection Error:", err.message);
       resetProgress();
       setError(err.response?.data?.detail || "Connection error.");
       if (err.response?.status === 401) handleLogout(true);
@@ -261,6 +267,7 @@ function App() {
         resetProgress();
       }, 400);
     } catch (err) { 
+      console.error("API Connection Error:", err.message);
       resetProgress();
       setError("Failed to load built-in demo."); 
     } finally { setLoading(false); }
@@ -290,7 +297,10 @@ function App() {
       setUserToken(res.data.access_token);
       setAuthModalOpen(false); setSessionExpired(false); setAuthEmail(''); setAuthOTP(''); setAuthStep(1);
       fetchUserHistoryList(res.data.access_token);
-    } catch (err) { setAuthError(err.response?.data?.detail || "Invalid authorization code."); } 
+    } catch (err) { 
+      console.error("API Connection Error:", err.message);
+      setAuthError(err.response?.data?.detail || "Invalid authorization code."); 
+    } 
     finally { setAuthLoading(false); }
   };
 
