@@ -545,7 +545,7 @@ async def send_otp(payload: EmailAuthRequest):
             
         async with httpx.AsyncClient() as client:
             resend_payload = {
-                "from": "MotionMap <onboarding@resend.dev>",
+                "from": "MotionMap <security@performancedecoded.com>",
                 "to": [clear_email],
                 "subject": "Your MotionMap Verification Code",
                 "html": f"""
