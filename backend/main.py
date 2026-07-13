@@ -36,16 +36,26 @@ from engine import (
     compute_run_stats, utc_to_local_string
 )
 
-app = FastAPI(title="Motion Map Analyzer", version="2.0")
+app = FastAPI(title="Performance Decoded", version="2.0")
 
 # ----------------------------------------------------------------------------------
 # CONFIGURATION & CORS MIDDLEWARE INTERFACES
 # ----------------------------------------------------------------------------------
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+# .rstrip("/") ensures any trailing slashes in your environment variables are removed
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+
+# Explicitly whitelist both the root and www domain variants alongside local environments
+allowed_origins = [
+    FRONTEND_URL,
+    "https://performancedecoded.com",
+    "https://www.performancedecoded.com",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173"
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL, "http://localhost:5173", "http://127.0.0.1:5173"], 
+    allow_origins=allowed_origins, 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -545,7 +555,7 @@ async def send_otp(payload: EmailAuthRequest):
             
         async with httpx.AsyncClient() as client:
             resend_payload = {
-                "from": "MotionMap <security@performancedecoded.com>",
+                "from": "PerformanceDecoded No-Reply <security@performancedecoded.com>",
                 "to": [clear_email],
                 "subject": "Your MotionMap Verification Code",
                 "html": f"""
