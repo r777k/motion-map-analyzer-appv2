@@ -519,7 +519,7 @@ function App() {
 
         <header className="flex flex-col items-center mb-6 mt-4 text-center select-none flex-shrink-0">
           <img src="/logo.png" alt="Logo" className="w-16 h-16 mb-2 drop-shadow-md" />
-          <h1 className="text-2xl font-black tracking-tight">Motion Map Analyzer</h1>
+          <h1 className="text-2xl font-black tracking-tight">Performance Decoded</h1>
           <p className="text-[10px] font-black uppercase tracking-widest mt-1">
             <span style={{ color: '#A27035' }}>Perform</span>
             <span className="opacity-40 text-slate-500 dark:text-slate-400 mx-1.5">.</span>
@@ -652,7 +652,7 @@ function App() {
                         </div>
                       ) : (
                         <div className="text-center">
-                           <button type="button" disabled={loading || isSimulatingProgress} onClick={() => { const redirectURI = encodeURIComponent("https://motion-map-analyzer-appv2.vercel.app"); window.location.href = `https://www.strava.com/oauth/authorize?client_id=${import.meta.env.VITE_STRAVA_CLIENT_ID || '260297'}&response_type=code&redirect_uri=${redirectURI}&approval_prompt=auto&scope=activity:read_all`; }} className="px-4 py-2.5 bg-[#FC6100] text-white text-xs font-black rounded-xl shadow-md border-0 w-full disabled:opacity-50">Authenticate via Strava OAuth</button>
+                           <button type="button" disabled={loading || isSimulatingProgress} onClick={() => { const redirectURI = encodeURIComponent("https://performancedecoded.com"); window.location.href = `https://www.strava.com/oauth/authorize?client_id=${import.meta.env.VITE_STRAVA_CLIENT_ID || '260297'}&response_type=code&redirect_uri=${redirectURI}&approval_prompt=auto&scope=activity:read_all`; }} className="px-4 py-2.5 bg-[#FC6100] text-white text-xs font-black rounded-xl shadow-md border-0 w-full disabled:opacity-50">Authenticate via Strava OAuth</button>
                         </div>
                       )
                     )}
@@ -715,7 +715,7 @@ function App() {
         <div style={{ width: `${sidebarWidth}px` }} className={`flex-shrink-0 h-full overflow-y-auto p-5 shadow-sm flex flex-col space-y-6 border-r ${theme === 'dark' ? 'bg-slate-900/40 border-slate-800' : 'bg-slate-50/50 border-slate-200'}`}>
           <header className="pb-4 border-b flex justify-between items-start flex-shrink-0 dark:border-slate-800">
             <div>
-              <h1 className="text-base font-black tracking-tight flex items-center space-x-2"><img src="/logo.png" alt="Logo" className="w-5 h-5" /><span>Motion Map Analyzer</span></h1>
+              <h1 className="text-base font-black tracking-tight flex items-center space-x-2"><img src="/logo.png" alt="Logo" className="w-5 h-5" /><span>Performance Decoded</span></h1>
               <div className="flex items-center space-x-1.5 mt-2.5">
                 <button onClick={exportToCSV} className="px-2 py-1 text-[10px] font-bold rounded border dark:border-slate-700 bg-transparent"><Download className="w-3 h-3 inline mr-1" />Export CSV</button>
                 <button onClick={captureVisualSnapshot} className="px-2 py-1 text-[10px] font-bold rounded border dark:border-slate-700 bg-transparent"><Camera className="w-3 h-3 inline mr-1" />Share Card</button>
